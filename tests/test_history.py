@@ -82,8 +82,9 @@ def test_history_returns_request_history_sorted_by_created_at() -> None:
     query, args = pool.connection.fetch_calls[0]
     assert "FROM request_history" in query
     assert "ORDER BY created_at DESC" in query
+    assert "LIMIT $1 OFFSET $2" in query
     assert "WHERE cadastral_number" not in query
-    assert args == ()
+    assert args == (100, 0)
 
 
 def test_history_filters_by_cadastral_number() -> None:
@@ -112,4 +113,32 @@ def test_history_filters_by_cadastral_number() -> None:
     query, args = pool.connection.fetch_calls[0]
     assert "WHERE cadastral_number = $1" in query
     assert "ORDER BY created_at DESC" in query
-    assert args == ("77:01:0004012:2054",)
+    assert "LIMIT $2 OFFSET $3" in query
+    assert args == ("77:01:0004012:2054", 100, 0)
+
+
+def test_history_applies_limit_and_offset_to_sql() -> None:
+    pool = FakePool([])
+    app.state.db_pool = pool
+    client = TestClient(app)
+
+    response = client.get("/history", params={"limit": 25, "offset": 50})
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+    query, args = pool.connection.fetch_calls[0]
+    assert "ORDER BY created_at DESC" in query
+    assert "LIMIT $1 OFFSET $2" in query
+    assert args == (25, 50)
+
+
+def test_history_rejects_invalid_limit() -> None:
+    pool = FakePool([])
+    app.state.db_pool = pool
+    client = TestClient(app)
+
+    response = client.get("/history", params={"limit": 0})
+
+    assert response.status_code == 422
+    assert pool.connection.fetch_calls == []
