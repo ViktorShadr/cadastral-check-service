@@ -14,7 +14,9 @@ COPY pyproject.toml poetry.lock ./
 RUN poetry install --only main --no-ansi
 
 COPY app ./app
+COPY migrations ./migrations
+COPY scripts ./scripts
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "python -m scripts.migrate && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
