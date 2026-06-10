@@ -1,35 +1,21 @@
 import asyncio
 import random
-from datetime import datetime
 from typing import Annotated
 
 import asyncpg
 from fastapi import APIRouter, Query, Request
-from pydantic import BaseModel
+
+from app.schemas import (
+    HistoryItem,
+    OptionalCadastralNumber,
+    QueryRequest,
+    QueryResponse,
+)
 
 router = APIRouter()
 RESULT_DELAY_SECONDS = 0.1
 DEFAULT_HISTORY_LIMIT = 100
 MAX_HISTORY_LIMIT = 500
-
-
-class QueryRequest(BaseModel):
-    cadastral_number: str
-    latitude: float
-    longitude: float
-
-
-class QueryResponse(BaseModel):
-    result: bool
-
-
-class HistoryItem(BaseModel):
-    id: int
-    cadastral_number: str
-    latitude: float
-    longitude: float
-    result: bool
-    created_at: datetime
 
 
 @router.get("/ping")
@@ -86,7 +72,10 @@ async def query(payload: QueryRequest, request: Request) -> QueryResponse:
 @router.get("/history")
 async def history(
     request: Request,
-    cadastral_number: str | None = None,
+    cadastral_number: Annotated[
+        OptionalCadastralNumber,
+        Query(),
+    ] = None,
     limit: Annotated[
         int,
         Query(ge=1, le=MAX_HISTORY_LIMIT),
