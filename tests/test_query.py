@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app.api import routes
@@ -57,3 +58,47 @@ def test_query_returns_result_and_saves_request(monkeypatch) -> None:  # noqa: A
     query, args = pool.connection.executed_queries[0]
     assert "INSERT INTO request_history" in query
     assert args == ("77:01:0004012:2054", 55.7558, 37.6173, True)
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected_error"),
+    [
+        (
+            {
+                "cadastral_number": "77-01-0004012-2054",
+                "latitude": 55.7558,
+                "longitude": 37.6173,
+            },
+            "Cadastral number must contain four numeric parts",
+        ),
+        (
+            {
+                "cadastral_number": "77:01:0004012:2054",
+                "latitude": 90.1,
+                "longitude": 37.6173,
+            },
+            "Latitude must be a finite number between -90 and 90",
+        ),
+        (
+            {
+                "cadastral_number": "77:01:0004012:2054",
+                "latitude": 55.7558,
+                "longitude": 180.1,
+            },
+            "Longitude must be a finite number between -180 and 180",
+        ),
+    ],
+)
+def test_query_rejects_invalid_payload(
+    payload: dict[str, object],
+    expected_error: str,
+) -> None:
+    pool = FakePool()
+    app.state.db_pool = pool
+    client = TestClient(app)
+
+    response = client.post("/query", json=payload)
+
+    assert response.status_code == 422
+    assert expected_error in str(response.json())
+    assert pool.connection.executed_queries == []

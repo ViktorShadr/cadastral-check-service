@@ -142,3 +142,15 @@ def test_history_rejects_invalid_limit() -> None:
 
     assert response.status_code == 422
     assert pool.connection.fetch_calls == []
+
+
+def test_history_rejects_invalid_cadastral_number_filter() -> None:
+    pool = FakePool([])
+    app.state.db_pool = pool
+    client = TestClient(app)
+
+    response = client.get("/history", params={"cadastral_number": "invalid"})
+
+    assert response.status_code == 422
+    assert "Cadastral number must contain four numeric parts" in str(response.json())
+    assert pool.connection.fetch_calls == []
