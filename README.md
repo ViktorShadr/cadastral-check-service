@@ -110,7 +110,7 @@ EXTERNAL_SERVICE_TIMEOUT=2.0
 EXTERNAL_SERVICE_PORT=8002
 JWT_SECRET_KEY=change-this-secret
 ACCESS_TOKEN_EXPIRE_MINUTES=30
-COOKIE_SECURE=true
+COOKIE_SECURE=false
 POSTGRES_DB=cadastral_check_service
 POSTGRES_USER=postgres_user
 POSTGRES_PASSWORD=postgres_password
@@ -131,8 +131,9 @@ external-service.
 `JWT_SECRET_KEY` signs access tokens. Use a strong unique value in production.
 `ACCESS_TOKEN_EXPIRE_MINUTES` controls access token lifetime.
 `COOKIE_SECURE` controls the `Secure` flag on the admin panel session cookie.
-Keep it `true` in HTTPS production deployments. Set it to `false` only for
-local HTTP development, for example `http://localhost`.
+The `.env.example` value `COOKIE_SECURE=false` is only for local HTTP
+development, for example `http://localhost`. HTTPS production deployments must
+override it with `COOKIE_SECURE=true`.
 
 `APP_PORT` controls the host port exposed by Docker Compose for the main app.
 The app always listens on port `8000` inside the container. If your `.env`
