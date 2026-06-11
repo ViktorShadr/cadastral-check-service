@@ -65,7 +65,6 @@ For example, with `APP_PORT=8001`, the main service URL is
 | `POST` | `/auth/register` | Registers a user with email and password. |
 | `POST` | `/auth/login` | Returns a JWT access token for valid credentials. |
 | `GET` | `/auth/me` | Returns the current authenticated user. |
-| `GET` | `/result` | Compatibility endpoint. Proxies a default request to external-service and returns `true` or `false`. |
 | `POST` | `/result` | Compatibility endpoint. Proxies request data to external-service and returns `true` or `false`. |
 | `POST` | `/query` | Checks cadastral data, stores request history for the current user, and returns the result. Requires Bearer auth. |
 | `GET` | `/history` | Returns request history sorted by `created_at` descending. Regular users see only their own history. Requires Bearer auth. |
@@ -305,18 +304,6 @@ Response:
 ```
 
 ### Main Service Compatibility Result Endpoint
-
-```bash
-curl http://localhost:8000/result
-```
-
-Response:
-
-```json
-true
-```
-
-POST is also supported:
 
 ```bash
 curl -X POST http://localhost:8000/result \

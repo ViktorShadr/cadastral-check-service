@@ -88,8 +88,8 @@ cookie created by `POST /admin/panel/login`.
 
 - `GET /ping` for process health.
 - `GET /ping/db` for database connectivity.
-- `GET /result` and `POST /result` compatibility endpoints that proxy to the
-  external result service and return a raw JSON boolean.
+- `POST /result` compatibility endpoint that proxies a required request body to
+  the external result service and returns a raw JSON boolean.
 - `POST /query` for authenticated cadastral checks and history persistence.
 - `GET /history` for authenticated request history with optional cadastral number
   filtering and pagination.
