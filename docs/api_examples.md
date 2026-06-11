@@ -833,12 +833,32 @@ Content type: `text/html`
 
 ## External-Service Emulator
 
-## `POST /result` on `external_service.main`
+### `GET /ping` on `external_service.main`
+
+This endpoint belongs to the external-service emulator and is used by Docker
+Compose as the container health check.
+
+#### Request
+
+```bash
+curl http://localhost:8002/ping
+```
+
+#### Successful Response
+
+Status: `200 OK`
+
+```json
+{"status":"ok"}
+```
+
+### `POST /result` on `external_service.main`
 
 This endpoint belongs to the external-service emulator, not to the main app. It
-accepts `QueryRequest`, waits briefly, and returns `QueryResponse`.
+accepts `QueryRequest`, waits for `EXTERNAL_SERVICE_RESULT_DELAY_SECONDS`, and
+returns `QueryResponse`.
 
-### Request
+#### Request
 
 ```bash
 curl -X POST http://localhost:8002/result \
@@ -850,7 +870,7 @@ curl -X POST http://localhost:8002/result \
   }'
 ```
 
-### Successful Response
+#### Successful Response
 
 Status: `200 OK`
 
@@ -858,6 +878,6 @@ Status: `200 OK`
 {"result":true}
 ```
 
-### Possible Errors
+#### Possible Errors
 
 - `422 Unprocessable Entity` for invalid cadastral number or coordinates.
