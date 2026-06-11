@@ -9,3 +9,5 @@ class Settings(BaseSettings):
     )
 
     database_url: str
+    external_service_url: str = "http://localhost:8001"
+    external_service_timeout: float = 2.0

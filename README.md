@@ -1,8 +1,9 @@
 # Cadastral Check Service
 
-Backend service for cadastral checks. The service accepts a cadastral number,
-latitude, and longitude, emulates an external cadastral check, stores the request
-and boolean result in PostgreSQL, and exposes request history through an API.
+Backend service for cadastral checks. The main service accepts a cadastral
+number, latitude, and longitude, requests a separate external-service emulator,
+stores the request and boolean result in PostgreSQL, and exposes request history
+through an API.
 
 ## Stack
 
@@ -14,6 +15,7 @@ and boolean result in PostgreSQL, and exposes request history through an API.
 - Raw SQL migrations
 - Docker and Docker Compose
 - Poetry
+- httpx
 - Pytest
 - Black, isort, and flake8
 
@@ -21,8 +23,9 @@ and boolean result in PostgreSQL, and exposes request history through an API.
 
 Interactive API documentation is available after startup:
 
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
+- Main service Swagger UI: `http://localhost:8000/docs`
+- Main service ReDoc: `http://localhost:8000/redoc`
+- External service Swagger UI: `http://localhost:8002/docs`
 
 ### Endpoints
 
@@ -30,10 +33,16 @@ Interactive API documentation is available after startup:
 | --- | --- | --- |
 | `GET` | `/ping` | Application health check. |
 | `GET` | `/ping/db` | PostgreSQL connection health check. |
-| `GET` | `/result` | External service emulator. Returns `true` or `false`. |
-| `POST` | `/result` | External service emulator. Returns `true` or `false`. |
+| `GET` | `/result` | Compatibility endpoint. Proxies a default request to external-service and returns `true` or `false`. |
+| `POST` | `/result` | Compatibility endpoint. Proxies request data to external-service and returns `true` or `false`. |
 | `POST` | `/query` | Checks cadastral data, stores request history, and returns the result. |
 | `GET` | `/history` | Returns stored request history sorted by `created_at` descending. |
+
+The external-service exposes:
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/result` | Accepts cadastral data, emulates processing delay, and returns `{"result": true}` or `{"result": false}`. |
 
 ### Validation
 
@@ -59,6 +68,9 @@ user, and password as the PostgreSQL variables:
 ```env
 DATABASE_URL=postgresql://postgres_user:postgres_password@db:5432/cadastral_check_service
 APP_PORT=8000
+EXTERNAL_SERVICE_URL=http://external-service:8001
+EXTERNAL_SERVICE_TIMEOUT=2.0
+EXTERNAL_SERVICE_PORT=8002
 POSTGRES_DB=cadastral_check_service
 POSTGRES_USER=postgres_user
 POSTGRES_PASSWORD=postgres_password
@@ -69,17 +81,23 @@ instance reachable from the host machine, for example:
 
 ```env
 DATABASE_URL=postgresql://postgres_user:postgres_password@localhost:5432/cadastral_check_service
+EXTERNAL_SERVICE_URL=http://localhost:8001
 ```
+
+`EXTERNAL_SERVICE_TIMEOUT` is the main service timeout in seconds for calls to
+external-service.
 
 ## Run With Docker
 
-Build and start the application and PostgreSQL:
+Build and start the main application, external-service, and PostgreSQL:
 
 ```bash
 docker compose up --build
 ```
 
-The Docker image runs database migrations automatically before starting Uvicorn.
+The main app container runs database migrations automatically before starting
+Uvicorn. The external-service container runs a separate FastAPI app from the
+same image.
 
 Check the service:
 
@@ -91,6 +109,24 @@ Expected response:
 
 ```json
 {"status":"ok"}
+```
+
+Check external-service directly:
+
+```bash
+curl -X POST http://localhost:8002/result \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cadastral_number": "77:01:0004012:2054",
+    "latitude": 55.7558,
+    "longitude": 37.6173
+  }'
+```
+
+Expected response:
+
+```json
+{"result":true}
 ```
 
 Stop containers:
@@ -125,6 +161,12 @@ Start the app:
 
 ```bash
 poetry run uvicorn app.main:app --reload
+```
+
+In a separate terminal, start the external-service:
+
+```bash
+poetry run uvicorn external_service.main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
 Check the service:
@@ -176,7 +218,7 @@ Response:
 {"status":"ok"}
 ```
 
-### External Result Emulator
+### Main Service Compatibility Result Endpoint
 
 ```bash
 curl http://localhost:8000/result
@@ -191,7 +233,31 @@ true
 POST is also supported:
 
 ```bash
-curl -X POST http://localhost:8000/result
+curl -X POST http://localhost:8000/result \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cadastral_number": "77:01:0004012:2054",
+    "latitude": 55.7558,
+    "longitude": 37.6173
+  }'
+```
+
+### External Result Emulator
+
+```bash
+curl -X POST http://localhost:8002/result \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cadastral_number": "77:01:0004012:2054",
+    "latitude": 55.7558,
+    "longitude": 37.6173
+  }'
+```
+
+Response:
+
+```json
+{"result":true}
 ```
 
 ### Cadastral Query
@@ -253,8 +319,10 @@ app/
   api/routes.py          API routes
   core/config.py         Environment-based settings
   core/database.py       asyncpg connection pool
+  services/              External service clients
   main.py                FastAPI application
   schemas.py             Pydantic schemas and validators
+external_service/        External FastAPI result emulator
 migrations/              Raw SQL migrations
 scripts/migrate.py       Migration runner
 tests/                   Pytest test suite
