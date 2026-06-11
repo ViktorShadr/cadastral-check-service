@@ -13,3 +13,4 @@ class Settings(BaseSettings):
     external_service_timeout: float = 2.0
     jwt_secret_key: str = "change-me-in-production"
     access_token_expire_minutes: int = 30
+    cookie_secure: bool = True

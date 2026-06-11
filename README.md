@@ -16,6 +16,7 @@ through an API.
 - Docker and Docker Compose
 - Poetry
 - httpx
+- Jinja2 templates for the HTML admin panel
 - Pytest
 - Black, isort, and flake8
 
@@ -26,6 +27,10 @@ Interactive API documentation is available after startup:
 - Main service Swagger UI: `http://localhost:8000/docs`
 - Main service ReDoc: `http://localhost:8000/redoc`
 - External service Swagger UI: `http://localhost:8002/docs`
+
+If `.env` sets a different `APP_PORT`, use that host port instead of `8000`.
+For example, with `APP_PORT=8001`, the main service URL is
+`http://localhost:8001`.
 
 ### Endpoints
 
@@ -43,6 +48,13 @@ Interactive API documentation is available after startup:
 | `GET` | `/admin/users` | Returns users for administrators. Requires Bearer auth and `is_admin = true`. |
 | `GET` | `/admin/history` | Returns all request history for administrators. Supports filters and pagination. Requires Bearer auth and `is_admin = true`. |
 | `GET` | `/admin/history/{request_id}` | Returns one history record by id for administrators. Requires Bearer auth and `is_admin = true`. |
+| `GET` | `/admin/panel` | Minimal HTML admin dashboard. Requires Bearer auth and `is_admin = true`. |
+| `GET` | `/admin/panel/login` | HTML login form for the admin panel. |
+| `POST` | `/admin/panel/login` | Creates an HttpOnly admin panel cookie for a valid admin user. |
+| `POST` | `/admin/panel/logout` | Clears the admin panel cookie and redirects to the login form. |
+| `GET` | `/admin/panel/users` | HTML table with users. Requires Bearer auth and `is_admin = true`. |
+| `GET` | `/admin/panel/history` | HTML table with request history and user emails. Requires Bearer auth and `is_admin = true`. |
+| `GET` | `/admin/panel/history/{request_id}` | HTML page for one history record. Requires Bearer auth and `is_admin = true`. |
 
 The external-service exposes:
 
@@ -98,6 +110,7 @@ EXTERNAL_SERVICE_TIMEOUT=2.0
 EXTERNAL_SERVICE_PORT=8002
 JWT_SECRET_KEY=change-this-secret
 ACCESS_TOKEN_EXPIRE_MINUTES=30
+COOKIE_SECURE=true
 POSTGRES_DB=cadastral_check_service
 POSTGRES_USER=postgres_user
 POSTGRES_PASSWORD=postgres_password
@@ -109,6 +122,7 @@ instance reachable from the host machine, for example:
 ```env
 DATABASE_URL=postgresql://postgres_user:postgres_password@localhost:5432/cadastral_check_service
 EXTERNAL_SERVICE_URL=http://localhost:8001
+COOKIE_SECURE=false
 ```
 
 `EXTERNAL_SERVICE_TIMEOUT` is the main service timeout in seconds for calls to
@@ -116,6 +130,17 @@ external-service.
 
 `JWT_SECRET_KEY` signs access tokens. Use a strong unique value in production.
 `ACCESS_TOKEN_EXPIRE_MINUTES` controls access token lifetime.
+`COOKIE_SECURE` controls the `Secure` flag on the admin panel session cookie.
+Keep it `true` in HTTPS production deployments. Set it to `false` only for
+local HTTP development, for example `http://localhost`.
+
+`APP_PORT` controls the host port exposed by Docker Compose for the main app.
+The app always listens on port `8000` inside the container. If your `.env`
+contains `APP_PORT=8001`, use `http://localhost:8001` for the main service
+instead of `http://localhost:8000`.
+
+`EXTERNAL_SERVICE_PORT` controls the host port for the external-service
+container. The external-service listens on port `8001` inside the container.
 
 ## Run With Docker
 
@@ -133,6 +158,12 @@ Check the service:
 
 ```bash
 curl http://localhost:8000/ping
+```
+
+If your `.env` contains `APP_PORT=8001`, use:
+
+```bash
+curl http://localhost:8001/ping
 ```
 
 Expected response:
@@ -339,6 +370,61 @@ Use the token in protected requests:
 TOKEN="<jwt>"
 ```
 
+### Create An Admin User
+
+There is no separate public admin registration endpoint. Create a regular user
+through `/auth/register`, then promote that user in PostgreSQL.
+
+Register the user:
+
+```bash
+curl -X POST http://localhost:8000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "admin@example.com",
+    "password": "admin-password"
+  }'
+```
+
+Promote the user when running with Docker Compose:
+
+```bash
+docker compose exec db psql \
+  -U "$POSTGRES_USER" \
+  -d "$POSTGRES_DB" \
+  -c "UPDATE users SET is_admin = true WHERE email = 'admin@example.com';"
+```
+
+If shell variables from `.env` are not exported, use the values directly. For
+the default `.env.example` values:
+
+```bash
+docker compose exec db psql \
+  -U postgres_user \
+  -d cadastral_check_service \
+  -c "UPDATE users SET is_admin = true WHERE email = 'admin@example.com';"
+```
+
+For the current local `.env` values in this workspace:
+
+```bash
+docker compose exec db psql \
+  -U postgres \
+  -d cadastral_check_service \
+  -c "UPDATE users SET is_admin = true WHERE email = 'admin@example.com';"
+```
+
+For a local PostgreSQL process outside Docker:
+
+```bash
+psql "$DATABASE_URL" \
+  -c "UPDATE users SET is_admin = true WHERE email = 'admin@example.com';"
+```
+
+After promotion, sign in to the HTML panel at
+`http://localhost:8000/admin/panel/login`, or get an API token from
+`/auth/login` and use it as `ADMIN_TOKEN`.
+
 ### Current User
 
 ```bash
@@ -473,6 +559,45 @@ curl http://localhost:8000/admin/history/1 \
   -H "Authorization: Bearer $ADMIN_TOKEN"
 ```
 
+### Admin Panel UI
+
+The service also includes a minimal server-rendered HTML admin panel built with
+Jinja2 templates. You can either open the login form in a browser or send the
+same Bearer token used by the Admin API. Browser login creates an HttpOnly
+cookie scoped to `/admin/panel`. Every panel page requires `users.is_admin = true`.
+
+Open the login form in a browser:
+
+```text
+http://localhost:8000/admin/panel/login
+```
+
+With the current workspace `.env` value `APP_PORT=8001`, use:
+
+```text
+http://localhost:8001/admin/panel/login
+```
+
+Use an active admin user's email and password. The logout button in the panel
+sends `POST /admin/panel/logout` and clears the panel cookie.
+
+Admin panel pages:
+
+| URL | Description |
+| --- | --- |
+| `http://localhost:8000/admin/panel/login` | Login form for active admin users. |
+| `http://localhost:8000/admin/panel` | Dashboard with navigation links. |
+| `http://localhost:8000/admin/panel/users` | Users table with `id`, `email`, `is_active`, `is_admin`, and `created_at`. |
+| `http://localhost:8000/admin/panel/history` | Request history table with request id, user id, user email, cadastral number, coordinates, result, and creation time. |
+| `http://localhost:8000/admin/panel/history/{request_id}` | Detail page for a single history record. |
+
+Example request:
+
+```bash
+curl http://localhost:8000/admin/panel/history \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
 ## Project Structure
 
 ```text
@@ -485,6 +610,7 @@ app/
   core/database.py       asyncpg connection pool
   core/security.py       Password hashing and JWT helpers
   services/              External service clients
+  templates/admin/       Jinja2 templates for the HTML admin panel
   main.py                FastAPI application
   schemas.py             Pydantic schemas and validators
 external_service/        External FastAPI result emulator

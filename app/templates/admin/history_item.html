@@ -1,0 +1,24 @@
+{% extends "admin/base.html" %}
+{% block content %}
+  <section class="panel">
+    <h1>History Request #{{ history_item.id }}</h1>
+    <dl>
+      <dt>request id</dt>
+      <dd>{{ history_item.id }}</dd>
+      <dt>user id</dt>
+      <dd>{{ history_item.user_id if history_item.user_id is not none else "" }}</dd>
+      <dt>user email</dt>
+      <dd>{{ history_item.user_email or "" }}</dd>
+      <dt>cadastral number</dt>
+      <dd>{{ history_item.cadastral_number }}</dd>
+      <dt>latitude</dt>
+      <dd>{{ history_item.latitude }}</dd>
+      <dt>longitude</dt>
+      <dd>{{ history_item.longitude }}</dd>
+      <dt>result</dt>
+      <dd class="bool-{{ history_item.result | lower }}">{{ history_item.result }}</dd>
+      <dt>created at</dt>
+      <dd>{{ history_item.created_at }}</dd>
+    </dl>
+  </section>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "admin/base.html" %}
+{% block content %}
+  <section class="panel">
+    <h1>Users</h1>
+    <p class="meta">Registered users sorted by creation time descending.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>id</th>
+          <th>email</th>
+          <th>is_active</th>
+          <th>is_admin</th>
+          <th>created_at</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for user in users %}
+          <tr>
+            <td>{{ user.id }}</td>
+            <td>{{ user.email }}</td>
+            <td class="bool-{{ user.is_active | lower }}">{{ user.is_active }}</td>
+            <td class="bool-{{ user.is_admin | lower }}">{{ user.is_admin }}</td>
+            <td>{{ user.created_at }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="5">No users found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endblock %}

@@ -4,6 +4,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.dependencies import get_current_user
+from app.core.config import Settings
+from app.core.security import hash_password
 from app.main import app
 from app.schemas import UserInDB
 
@@ -34,6 +36,10 @@ class FakeConnection:
                 key=lambda row: (row["created_at"], row["id"]),
                 reverse=True,
             )
+
+            if "left join users" in normalized_query:
+                rows = [self.pool.add_user_email(row) for row in rows]
+
             filter_arg_index = 0
 
             if "cadastral_number = $" in normalized_query:
@@ -62,14 +68,30 @@ class FakeConnection:
         self.fetchrow_calls.append((query, args))
         normalized_query = " ".join(query.lower().split())
 
-        if (
-            "from request_history" in normalized_query
-            and "where id = $1" in normalized_query
+        if "from request_history" in normalized_query and (
+            "where id = $1" in normalized_query
+            or "where rh.id = $1" in normalized_query
         ):
             request_id = args[0]
-            return next(
+            row = next(
                 (row for row in self.pool.history if row["id"] == request_id),
                 None,
+            )
+            if row is not None and "left join users" in normalized_query:
+                return self.pool.add_user_email(row)
+
+            return row
+
+        if "from users" in normalized_query and "where email = $1" in normalized_query:
+            email = args[0]
+            return next(
+                (user for user in self.pool.users if user["email"] == email), None
+            )
+
+        if "from users" in normalized_query and "where id = $1" in normalized_query:
+            user_id = args[0]
+            return next(
+                (user for user in self.pool.users if user["id"] == user_id), None
             )
 
         raise AssertionError(f"Unexpected fetchrow query: {query}")
@@ -93,6 +115,7 @@ class FakePool:
             {
                 "id": 1,
                 "email": "user@example.com",
+                "hashed_password": hash_password("regular-password"),
                 "is_active": True,
                 "is_admin": False,
                 "created_at": datetime(2026, 1, 1, 12, 0, tzinfo=UTC),
@@ -100,6 +123,7 @@ class FakePool:
             {
                 "id": 2,
                 "email": "admin@example.com",
+                "hashed_password": hash_password("admin-password"),
                 "is_active": True,
                 "is_admin": True,
                 "created_at": datetime(2026, 1, 2, 12, 0, tzinfo=UTC),
@@ -128,6 +152,16 @@ class FakePool:
 
     def acquire(self) -> FakeAcquireContext:
         return FakeAcquireContext(self.connection)
+
+    def add_user_email(self, row: dict[str, object]) -> dict[str, object]:
+        user = next(
+            (user for user in self.users if user["id"] == row["user_id"]),
+            None,
+        )
+        return {
+            **row,
+            "user_email": user["email"] if user is not None else None,
+        }
 
 
 def override_current_user(is_admin: bool) -> UserInDB:
@@ -323,3 +357,203 @@ def test_admin_history_filters_and_pagination_work() -> None:
     assert "WHERE cadastral_number = $1 AND user_id = $2 AND result = $3" in query
     assert "LIMIT $4 OFFSET $5" in query
     assert args == ("77:01:0004012:2054", 2, False, 1, 1)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/admin/panel",
+        "/admin/panel/users",
+        "/admin/panel/history",
+        "/admin/panel/history/1",
+    ],
+)
+def test_admin_can_access_admin_panel_pages(path: str) -> None:
+    pool = FakePool()
+    app.state.db_pool = pool
+    override_current_user(is_admin=True)
+    client = TestClient(app)
+
+    response = client.get(path)
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "Cadastral Admin" in response.text
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/admin/panel",
+        "/admin/panel/users",
+        "/admin/panel/history",
+        "/admin/panel/history/1",
+    ],
+)
+def test_regular_user_has_no_admin_panel_access(path: str) -> None:
+    pool = FakePool()
+    app.state.db_pool = pool
+    override_current_user(is_admin=False)
+    client = TestClient(app)
+
+    response = client.get(path)
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Admin access required."}
+    assert pool.connection.fetch_calls == []
+    assert pool.connection.fetchrow_calls == []
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/admin/panel",
+        "/admin/panel/users",
+        "/admin/panel/history",
+        "/admin/panel/history/1",
+    ],
+)
+def test_unauthorized_user_has_no_admin_panel_access(path: str) -> None:
+    pool = FakePool()
+    app.state.db_pool = pool
+    client = TestClient(app)
+
+    response = client.get(path)
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Not authenticated."}
+    assert pool.connection.fetch_calls == []
+    assert pool.connection.fetchrow_calls == []
+
+
+def test_admin_panel_history_contains_created_request_data() -> None:
+    pool = FakePool()
+    app.state.db_pool = pool
+    override_current_user(is_admin=True)
+    client = TestClient(app)
+
+    response = client.get("/admin/panel/history")
+
+    assert response.status_code == 200
+    assert "77:01:0004012:2055" in response.text
+    assert "admin@example.com" in response.text
+    assert "55.7559" in response.text
+    assert "37.6174" in response.text
+    assert "False" in response.text
+
+
+def test_admin_panel_users_contains_user_email() -> None:
+    pool = FakePool()
+    app.state.db_pool = pool
+    override_current_user(is_admin=True)
+    client = TestClient(app)
+
+    response = client.get("/admin/panel/users")
+
+    assert response.status_code == 200
+    assert "admin@example.com" in response.text
+    assert "user@example.com" in response.text
+
+
+def test_admin_panel_login_form_is_available() -> None:
+    client = TestClient(app)
+
+    response = client.get("/admin/panel/login")
+
+    assert response.status_code == 200
+    assert "Admin Login" in response.text
+    assert 'name="email"' in response.text
+    assert 'name="password"' in response.text
+
+
+def test_admin_can_login_to_panel_with_cookie_session() -> None:
+    pool = FakePool()
+    app.state.db_pool = pool
+    app.state.settings = Settings(
+        database_url="postgresql://test/test",
+        cookie_secure=False,
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/admin/panel/login",
+        data={
+            "email": "admin@example.com",
+            "password": "admin-password",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/admin/panel"
+    set_cookie = response.headers["set-cookie"]
+    assert "admin_panel_token" in set_cookie
+    assert "HttpOnly" in set_cookie
+    assert "SameSite=lax" in set_cookie
+    assert "Secure" not in set_cookie
+
+    panel_response = client.get("/admin/panel/users")
+
+    assert panel_response.status_code == 200
+    assert "admin@example.com" in panel_response.text
+
+
+def test_admin_panel_cookie_can_be_secure() -> None:
+    pool = FakePool()
+    app.state.db_pool = pool
+    app.state.settings = Settings(
+        database_url="postgresql://test/test",
+        cookie_secure=True,
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/admin/panel/login",
+        data={
+            "email": "admin@example.com",
+            "password": "admin-password",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    set_cookie = response.headers["set-cookie"]
+    assert "admin_panel_token" in set_cookie
+    assert "HttpOnly" in set_cookie
+    assert "SameSite=lax" in set_cookie
+    assert "Secure" in set_cookie
+
+
+def test_regular_user_cannot_login_to_admin_panel() -> None:
+    pool = FakePool()
+    app.state.db_pool = pool
+    app.state.settings = Settings(database_url="postgresql://test/test")
+    client = TestClient(app)
+
+    response = client.post(
+        "/admin/panel/login",
+        data={
+            "email": "user@example.com",
+            "password": "regular-password",
+        },
+    )
+
+    assert response.status_code == 403
+    assert "Admin access required." in response.text
+
+
+def test_invalid_admin_panel_login_is_rejected() -> None:
+    pool = FakePool()
+    app.state.db_pool = pool
+    client = TestClient(app)
+
+    response = client.post(
+        "/admin/panel/login",
+        data={
+            "email": "admin@example.com",
+            "password": "wrong-password",
+        },
+    )
+
+    assert response.status_code == 401
+    assert "Invalid email or password." in response.text
