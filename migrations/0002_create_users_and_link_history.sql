@@ -30,7 +30,7 @@ BEGIN
             REFERENCES users (id)
             ON DELETE SET NULL;
     END IF;
-END
+END;
 $$;
 
 CREATE INDEX IF NOT EXISTS idx_request_history_user_id
