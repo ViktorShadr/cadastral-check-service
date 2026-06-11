@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <style>
+    :root {
+      --bg: #f6f1e8;
+      --panel: #fffaf0;
+      --text: #1e2723;
+      --muted: #68736d;
+      --line: #d9cfbd;
+      --accent: #245b45;
+      --accent-soft: #dce8dd;
+      --danger: #8a3b2f;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: linear-gradient(135deg, #f6f1e8 0%, #e8efe7 100%);
+      color: var(--text);
+      font-family: Georgia, "Times New Roman", serif;
+      line-height: 1.45;
+    }
+
+    a {
+      color: var(--accent);
+    }
+
+    .shell {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 28px 0 48px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 16px;
+    }
+
+    .brand {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+
+    .nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .nav a,
+    .card-link,
+    button {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 12px;
+      background: rgba(255, 250, 240, 0.72);
+      color: var(--accent);
+      cursor: pointer;
+      font: inherit;
+      text-decoration: none;
+    }
+
+    .nav a:hover,
+    .card-link:hover,
+    button:hover {
+      background: var(--accent-soft);
+    }
+
+    .logout {
+      margin: 0;
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 14px;
+      margin-top: 4px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255, 250, 240, 0.82);
+      box-shadow: 0 18px 50px rgba(42, 52, 45, 0.08);
+      padding: 22px;
+      overflow-x: auto;
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: clamp(30px, 5vw, 56px);
+      letter-spacing: -0.05em;
+      line-height: 1;
+    }
+
+    h2 {
+      margin: 0 0 16px;
+      font-size: 24px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 760px;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .bool-true {
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .bool-false {
+      color: var(--danger);
+      font-weight: 700;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-top: 20px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255, 250, 240, 0.82);
+      padding: 18px;
+    }
+
+    dl {
+      display: grid;
+      grid-template-columns: minmax(140px, 220px) 1fr;
+      gap: 10px 18px;
+      margin: 0;
+    }
+
+    dt {
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    dd {
+      margin: 0;
+    }
+
+    @media (max-width: 720px) {
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      dl {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <div class="brand">Cadastral Admin</div>
+        <div class="meta">Signed in as {{ current_admin_user.email }}</div>
+      </div>
+      <nav class="nav" aria-label="Admin navigation">
+        <a href="/admin/panel">Dashboard</a>
+        <a href="/admin/panel/users">Users</a>
+        <a href="/admin/panel/history">History</a>
+        <form class="logout" action="/admin/panel/logout" method="post">
+          <button type="submit">Logout</button>
+        </form>
+      </nav>
+    </header>
+
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

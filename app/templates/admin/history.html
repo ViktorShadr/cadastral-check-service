@@ -1,0 +1,37 @@
+{% extends "admin/base.html" %}
+{% block content %}
+  <section class="panel">
+    <h1>History</h1>
+    <p class="meta">All cadastral requests sorted by creation time descending.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>request id</th>
+          <th>user id</th>
+          <th>user email</th>
+          <th>cadastral number</th>
+          <th>latitude</th>
+          <th>longitude</th>
+          <th>result</th>
+          <th>created at</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in history_items %}
+          <tr>
+            <td><a href="/admin/panel/history/{{ item.id }}">{{ item.id }}</a></td>
+            <td>{{ item.user_id if item.user_id is not none else "" }}</td>
+            <td>{{ item.user_email or "" }}</td>
+            <td>{{ item.cadastral_number }}</td>
+            <td>{{ item.latitude }}</td>
+            <td>{{ item.longitude }}</td>
+            <td class="bool-{{ item.result | lower }}">{{ item.result }}</td>
+            <td>{{ item.created_at }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="8">No history records found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endblock %}

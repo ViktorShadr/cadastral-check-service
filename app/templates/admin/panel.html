@@ -1,0 +1,19 @@
+{% extends "admin/base.html" %}
+{% block content %}
+  <section>
+    <h1>Admin Panel</h1>
+    <p class="meta">Minimal HTML UI for inspecting users and cadastral request history.</p>
+    <div class="cards">
+      <article class="card">
+        <h2>Users</h2>
+        <p>Review registered users and their active/admin flags.</p>
+        <a class="card-link" href="/admin/panel/users">Open users</a>
+      </article>
+      <article class="card">
+        <h2>History</h2>
+        <p>Review cadastral checks with request, user, coordinates, result, and timestamp.</p>
+        <a class="card-link" href="/admin/panel/history">Open history</a>
+      </article>
+    </div>
+  </section>
+{% endblock %}

@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <style>
+    :root {
+      --bg: #f6f1e8;
+      --panel: #fffaf0;
+      --text: #1e2723;
+      --muted: #68736d;
+      --line: #d9cfbd;
+      --accent: #245b45;
+      --danger: #8a3b2f;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at top left, #e8efe7, transparent 34%),
+        linear-gradient(135deg, #f6f1e8 0%, #efe5d1 100%);
+      color: var(--text);
+      font-family: Georgia, "Times New Roman", serif;
+    }
+
+    main {
+      width: min(440px, calc(100% - 32px));
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: rgba(255, 250, 240, 0.88);
+      box-shadow: 0 18px 50px rgba(42, 52, 45, 0.1);
+      padding: 28px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 42px;
+      letter-spacing: -0.05em;
+      line-height: 1;
+    }
+
+    p {
+      margin: 0 0 22px;
+      color: var(--muted);
+    }
+
+    label {
+      display: block;
+      margin: 14px 0 6px;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fffdf7;
+      color: var(--text);
+      font: inherit;
+      padding: 11px 12px;
+    }
+
+    button {
+      width: 100%;
+      margin-top: 18px;
+      border: 0;
+      border-radius: 999px;
+      background: var(--accent);
+      color: #fffdf7;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 700;
+      padding: 12px 14px;
+    }
+
+    .error {
+      border: 1px solid #d9b5ae;
+      border-radius: 14px;
+      background: #fff2ef;
+      color: var(--danger);
+      padding: 10px 12px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Admin Login</h1>
+    <p>Sign in with an active admin account.</p>
+    {% if error %}
+      <p class="error">{{ error }}</p>
+    {% endif %}
+    <form action="/admin/panel/login" method="post">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="username" required>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <button type="submit">Open admin panel</button>
+    </form>
+  </main>
+</body>
+</html>
