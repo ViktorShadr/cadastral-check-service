@@ -65,7 +65,6 @@ For example, with `APP_PORT=8001`, the main service URL is
 | `POST` | `/auth/register` | Registers a user with email and password. |
 | `POST` | `/auth/login` | Returns a JWT access token for valid credentials. |
 | `GET` | `/auth/me` | Returns the current authenticated user. |
-| `GET` | `/result` | Compatibility endpoint. Proxies a default request to external-service and returns `true` or `false`. |
 | `POST` | `/result` | Compatibility endpoint. Proxies request data to external-service and returns `true` or `false`. |
 | `POST` | `/query` | Checks cadastral data, stores request history for the current user, and returns the result. Requires Bearer auth. |
 | `GET` | `/history` | Returns request history sorted by `created_at` descending. Regular users see only their own history. Requires Bearer auth. |
@@ -84,6 +83,7 @@ The external-service exposes:
 
 | Method | Path | Description |
 | --- | --- | --- |
+| `GET` | `/ping` | External-service health check used by Docker Compose. |
 | `POST` | `/result` | Accepts cadastral data, emulates processing delay, and returns `{"result": true}` or `{"result": false}`. |
 
 ### Validation
@@ -130,7 +130,8 @@ user, and password as the PostgreSQL variables:
 DATABASE_URL=postgresql://postgres_user:postgres_password@db:5432/cadastral_check_service
 APP_PORT=8000
 EXTERNAL_SERVICE_URL=http://external-service:8001
-EXTERNAL_SERVICE_TIMEOUT=2.0
+EXTERNAL_SERVICE_TIMEOUT=60.0
+EXTERNAL_SERVICE_RESULT_DELAY_SECONDS=0.1
 EXTERNAL_SERVICE_PORT=8002
 JWT_SECRET_KEY=change-this-secret
 ACCESS_TOKEN_EXPIRE_MINUTES=30
@@ -146,11 +147,18 @@ instance reachable from the host machine, for example:
 ```env
 DATABASE_URL=postgresql://postgres_user:postgres_password@localhost:5432/cadastral_check_service
 EXTERNAL_SERVICE_URL=http://localhost:8001
+EXTERNAL_SERVICE_RESULT_DELAY_SECONDS=0.1
 COOKIE_SECURE=false
 ```
 
 `EXTERNAL_SERVICE_TIMEOUT` is the main service timeout in seconds for calls to
-external-service.
+external-service. The default is `60.0`, matching the assignment requirement
+that the external provider may process a request for up to 60 seconds.
+
+`EXTERNAL_SERVICE_RESULT_DELAY_SECONDS` controls the artificial processing delay
+inside the external-service emulator. The default `0.1` keeps local development
+and tests fast while still exercising asynchronous waiting behavior. If you
+increase it, keep `EXTERNAL_SERVICE_TIMEOUT` greater than or equal to the delay.
 
 `JWT_SECRET_KEY` signs access tokens. Use a strong unique value in production.
 `ACCESS_TOKEN_EXPIRE_MINUTES` controls access token lifetime.
@@ -177,7 +185,8 @@ docker compose up --build
 
 The main app container runs database migrations automatically before starting
 Uvicorn. The external-service container runs a separate FastAPI app from the
-same image.
+same image. Docker Compose checks `external-service` through `GET /ping` and
+starts the main app only after the emulator is healthy.
 
 Check the service:
 
@@ -198,6 +207,18 @@ Expected response:
 ```
 
 Check external-service directly:
+
+```bash
+curl http://localhost:8002/ping
+```
+
+Expected response:
+
+```json
+{"status":"ok"}
+```
+
+Check the external-service result endpoint:
 
 ```bash
 curl -X POST http://localhost:8002/result \
@@ -305,18 +326,6 @@ Response:
 ```
 
 ### Main Service Compatibility Result Endpoint
-
-```bash
-curl http://localhost:8000/result
-```
-
-Response:
-
-```json
-true
-```
-
-POST is also supported:
 
 ```bash
 curl -X POST http://localhost:8000/result \
@@ -643,5 +652,5 @@ migrations/              Raw SQL migrations
 scripts/migrate.py       Migration runner
 tests/                   Pytest test suite
 Dockerfile               Application image
-docker-compose.yml       Application and PostgreSQL services
+docker-compose.yml       Application, external-service, and PostgreSQL services
 ```

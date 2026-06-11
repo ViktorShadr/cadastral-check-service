@@ -6,21 +6,33 @@ services:
       - .env
     environment:
       EXTERNAL_SERVICE_URL: http://external-service:8001
-      EXTERNAL_SERVICE_TIMEOUT: ${EXTERNAL_SERVICE_TIMEOUT:-2.0}
+      EXTERNAL_SERVICE_TIMEOUT: ${EXTERNAL_SERVICE_TIMEOUT:-60.0}
     ports:
       - "${APP_PORT:-8000}:8000"
     depends_on:
       db:
         condition: service_healthy
       external-service:
-        condition: service_started
+        condition: service_healthy
 
   external-service:
     build: .
     container_name: cadastral-check-service-external-service
     command: uvicorn external_service.main:app --host 0.0.0.0 --port 8001
+    environment:
+      EXTERNAL_SERVICE_RESULT_DELAY_SECONDS: ${EXTERNAL_SERVICE_RESULT_DELAY_SECONDS:-0.1}
     ports:
       - "${EXTERNAL_SERVICE_PORT:-8002}:8001"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8001/ping', timeout=2).read()"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
 
   db:
     image: postgres:16-alpine

@@ -340,43 +340,6 @@ Status: `200 OK`
 {"detail":"External service request timed out."}
 ```
 
-## `GET /result`
-
-Compatibility endpoint. Proxies a default cadastral request to the external result
-service and returns a raw JSON boolean. It does not require authentication and
-does not persist history.
-
-Default payload used by the service:
-
-```json
-{
-  "cadastral_number": "77:01:0004012:2054",
-  "latitude": 55.7558,
-  "longitude": 37.6173
-}
-```
-
-### Request
-
-```bash
-curl http://localhost:8000/result
-```
-
-### Successful Response
-
-Status: `200 OK`
-
-```json
-true
-```
-
-### Possible Errors
-
-- `502 Bad Gateway` when the external service is unavailable or returns an
-  invalid response.
-- `504 Gateway Timeout` when the external service request exceeds the configured
-  timeout.
-
 ## `POST /result`
 
 Compatibility endpoint. Proxies the supplied cadastral request to the external
@@ -385,7 +348,7 @@ and does not persist history.
 
 ### Parameters
 
-JSON body uses `QueryRequest`.
+Required JSON body uses `QueryRequest`.
 
 ### Request
 
@@ -870,12 +833,32 @@ Content type: `text/html`
 
 ## External-Service Emulator
 
-## `POST /result` on `external_service.main`
+### `GET /ping` on `external_service.main`
+
+This endpoint belongs to the external-service emulator and is used by Docker
+Compose as the container health check.
+
+#### Request
+
+```bash
+curl http://localhost:8002/ping
+```
+
+#### Successful Response
+
+Status: `200 OK`
+
+```json
+{"status":"ok"}
+```
+
+### `POST /result` on `external_service.main`
 
 This endpoint belongs to the external-service emulator, not to the main app. It
-accepts `QueryRequest`, waits briefly, and returns `QueryResponse`.
+accepts `QueryRequest`, waits for `EXTERNAL_SERVICE_RESULT_DELAY_SECONDS`, and
+returns `QueryResponse`.
 
-### Request
+#### Request
 
 ```bash
 curl -X POST http://localhost:8002/result \
@@ -887,7 +870,7 @@ curl -X POST http://localhost:8002/result \
   }'
 ```
 
-### Successful Response
+#### Successful Response
 
 Status: `200 OK`
 
@@ -895,6 +878,6 @@ Status: `200 OK`
 {"result":true}
 ```
 
-### Possible Errors
+#### Possible Errors
 
 - `422 Unprocessable Entity` for invalid cadastral number or coordinates.

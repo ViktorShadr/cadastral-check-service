@@ -48,9 +48,10 @@ external call or database write is performed.
 4. `request_external_result` calls `fetch_external_result` from
    `app/services/external_result.py`.
 5. The service layer sends `POST /result` to `EXTERNAL_SERVICE_URL` using
-   `httpx.AsyncClient` and the configured timeout.
+   `httpx.AsyncClient` and the configured `EXTERNAL_SERVICE_TIMEOUT`.
 6. The external-service emulator validates the same `QueryRequest` schema, waits
-   briefly, and returns `{"result": true}` or `{"result": false}`.
+   for the configured `EXTERNAL_SERVICE_RESULT_DELAY_SECONDS`, and returns
+   `{"result": true}` or `{"result": false}`.
 7. The main service validates the provider response as `QueryResponse`.
 8. The API handler inserts a new row into `request_history` with the current
    `user_id`, request payload, returned boolean result, and database timestamp.
@@ -88,8 +89,8 @@ cookie created by `POST /admin/panel/login`.
 
 - `GET /ping` for process health.
 - `GET /ping/db` for database connectivity.
-- `GET /result` and `POST /result` compatibility endpoints that proxy to the
-  external result service and return a raw JSON boolean.
+- `POST /result` compatibility endpoint that proxies a required request body to
+  the external result service and returns a raw JSON boolean.
 - `POST /query` for authenticated cadastral checks and history persistence.
 - `GET /history` for authenticated request history with optional cadastral number
   filtering and pagination.
@@ -146,10 +147,12 @@ by the Docker image before the main Uvicorn process starts.
 ### External Result Emulator
 
 `external_service/main.py` is a separate FastAPI application. It exposes
-`POST /result`, accepts the same `QueryRequest` schema, waits `0.1` seconds, and
-returns a random `QueryResponse` boolean. In Docker Compose it runs as a separate
-service named `external-service` on container port `8001` and is reachable from
-the host through `EXTERNAL_SERVICE_PORT` defaulting to `8002`.
+`GET /ping` and `POST /result`. The result endpoint accepts the same
+`QueryRequest` schema, waits for `EXTERNAL_SERVICE_RESULT_DELAY_SECONDS`
+defaulting to `0.1` seconds, and returns a random `QueryResponse` boolean. In
+Docker Compose it runs as a separate service named `external-service` on
+container port `8001`, exposes a healthcheck against `/ping`, and is reachable
+from the host through `EXTERNAL_SERVICE_PORT` defaulting to `8002`.
 
 ## Used Technologies
 

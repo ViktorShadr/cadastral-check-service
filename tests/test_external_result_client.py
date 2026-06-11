@@ -41,6 +41,32 @@ def patch_async_client(
     monkeypatch.setattr(external_result.httpx, "AsyncClient", client_factory)
 
 
+def test_external_service_timeout_defaults_to_assignment_limit(
+    monkeypatch,
+) -> None:  # noqa: ANN001
+    monkeypatch.delenv("EXTERNAL_SERVICE_TIMEOUT", raising=False)
+
+    settings = Settings(
+        database_url="postgresql://postgres:postgres@db:5432/test",
+        _env_file=None,
+    )
+
+    assert settings.external_service_timeout == 60.0
+
+
+def test_external_service_timeout_can_be_configured_from_env(
+    monkeypatch,
+) -> None:  # noqa: ANN001
+    monkeypatch.setenv("EXTERNAL_SERVICE_TIMEOUT", "12.5")
+
+    settings = Settings(
+        database_url="postgresql://postgres:postgres@db:5432/test",
+        _env_file=None,
+    )
+
+    assert settings.external_service_timeout == 12.5
+
+
 def test_fetch_external_result_posts_payload_and_returns_boolean(
     monkeypatch,
 ) -> None:  # noqa: ANN001
