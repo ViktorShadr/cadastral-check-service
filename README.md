@@ -20,6 +20,30 @@ through an API.
 - Pytest
 - Black, isort, and flake8
 
+## Documentation
+
+Additional technical documentation is available in `docs/`:
+
+- [Architecture](docs/architecture.md) - service layers, request flow, project
+  structure, external-service interaction, and architecture diagram.
+- [Database](docs/database.md) - tables, relationships, indexes, constraints,
+  storage logic, and ER diagram.
+- [API Examples](docs/api_examples.md) - endpoint-by-endpoint request and
+  response examples with validation and error cases.
+- [Architecture Decisions](docs/decisions.md) - ADR records for the main
+  technology and architecture choices.
+
+At a high level, the project is an async FastAPI service with Pydantic schemas
+at the API boundary, JWT-based authentication, direct PostgreSQL access through
+`asyncpg`, raw SQL migrations, and a separate FastAPI external-service emulator
+called through `httpx`.
+
+Interactive API documentation is available after startup:
+
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
+- External service Swagger UI: `http://localhost:8002/docs`
+
 ## API
 
 Interactive API documentation is available after startup:
