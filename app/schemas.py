@@ -3,7 +3,7 @@ import re
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import AfterValidator, BaseModel, Field
+from pydantic import AfterValidator, BaseModel, BeforeValidator, Field
 
 CADASTRAL_NUMBER_PATTERN = re.compile(r"^\d+:\d+:\d+:\d+$")
 CADASTRAL_NUMBER_ERROR = (
@@ -28,6 +28,13 @@ def validate_optional_cadastral_number(value: str | None) -> str | None:
         return None
 
     return validate_cadastral_number(value)
+
+
+def validate_json_number(value: object) -> object:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("Coordinate must be a JSON number.")
+
+    return value
 
 
 def validate_latitude(value: float) -> float:
@@ -63,11 +70,13 @@ OptionalCadastralNumber = Annotated[
 Latitude = Annotated[
     float,
     Field(description="Latitude in degrees from -90 to 90."),
+    BeforeValidator(validate_json_number),
     AfterValidator(validate_latitude),
 ]
 Longitude = Annotated[
     float,
     Field(description="Longitude in degrees from -180 to 180."),
+    BeforeValidator(validate_json_number),
     AfterValidator(validate_longitude),
 ]
 
