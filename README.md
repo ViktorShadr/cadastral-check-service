@@ -40,6 +40,9 @@ Interactive API documentation is available after startup:
 | `POST` | `/result` | Compatibility endpoint. Proxies request data to external-service and returns `true` or `false`. |
 | `POST` | `/query` | Checks cadastral data, stores request history for the current user, and returns the result. Requires Bearer auth. |
 | `GET` | `/history` | Returns request history sorted by `created_at` descending. Regular users see only their own history. Requires Bearer auth. |
+| `GET` | `/admin/users` | Returns users for administrators. Requires Bearer auth and `is_admin = true`. |
+| `GET` | `/admin/history` | Returns all request history for administrators. Supports filters and pagination. Requires Bearer auth and `is_admin = true`. |
+| `GET` | `/admin/history/{request_id}` | Returns one history record by id for administrators. Requires Bearer auth and `is_admin = true`. |
 
 The external-service exposes:
 
@@ -55,6 +58,12 @@ The external-service exposes:
 - `longitude` must be a finite number from `-180` to `180`.
 - `/history` supports `limit` from `1` to `500`; default is `100`.
 - `/history` supports `offset` from `0`; default is `0`.
+- `/admin/users` supports `limit` from `1` to `500` and `offset` from `0`;
+  defaults are `100` and `0`.
+- `/admin/history` supports `limit` from `1` to `500` and `offset` from `0`;
+  defaults are `100` and `0`.
+- `/admin/history` supports filters by `cadastral_number`, `user_id`, and
+  `result`.
 - Invalid input returns `422 Unprocessable Entity` with validation details.
 
 ### Authorization
@@ -65,6 +74,10 @@ The external-service exposes:
 - Missing, invalid, expired, or inactive-user tokens return `401 Unauthorized`.
 - `/query` and `/history` are protected. A regular user sees only records linked
   to their own `users.id`.
+- `/admin/*` endpoints are protected by the same Bearer authentication and also
+  require `users.is_admin = true`.
+- A regular authenticated user receives `403 Forbidden` on `/admin/*`.
+- An unauthenticated request receives `401 Unauthorized` on `/admin/*`.
 
 ## Environment
 
@@ -389,10 +402,82 @@ curl "http://localhost:8000/history?limit=25&offset=50" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
+### Admin API
+
+Admin endpoints require a token for a user with `is_admin = true`:
+
+```bash
+ADMIN_TOKEN="<admin-jwt>"
+```
+
+List users:
+
+```bash
+curl "http://localhost:8000/admin/users?limit=100&offset=0" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+Response:
+
+```json
+[
+  {
+    "id": 1,
+    "email": "user@example.com",
+    "is_active": true,
+    "is_admin": false,
+    "created_at": "2026-01-01T12:00:00Z"
+  }
+]
+```
+
+List all request history:
+
+```bash
+curl "http://localhost:8000/admin/history?limit=100&offset=0" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+Filter admin history:
+
+```bash
+curl --get http://localhost:8000/admin/history \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  --data-urlencode "cadastral_number=77:01:0004012:2054" \
+  --data-urlencode "user_id=1" \
+  --data-urlencode "result=true" \
+  --data-urlencode "limit=25" \
+  --data-urlencode "offset=0"
+```
+
+Response:
+
+```json
+[
+  {
+    "id": 1,
+    "user_id": 1,
+    "cadastral_number": "77:01:0004012:2054",
+    "latitude": 55.7558,
+    "longitude": 37.6173,
+    "result": true,
+    "created_at": "2026-01-01T12:00:00Z"
+  }
+]
+```
+
+Open a single history record:
+
+```bash
+curl http://localhost:8000/admin/history/1 \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
 ## Project Structure
 
 ```text
 app/
+  api/admin.py           Admin API routes
   api/auth.py            Authentication routes
   api/dependencies.py    Shared FastAPI dependencies
   api/routes.py          API routes
