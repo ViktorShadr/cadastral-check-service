@@ -317,6 +317,7 @@ async def admin_panel_login_submit(request: Request):
         max_age=settings.access_token_expire_minutes * 60,
         path="/admin/panel",
         samesite="lax",
+        secure=settings.cookie_secure,
     )
 
     return response

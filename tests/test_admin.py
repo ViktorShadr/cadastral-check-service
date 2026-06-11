@@ -469,7 +469,10 @@ def test_admin_panel_login_form_is_available() -> None:
 def test_admin_can_login_to_panel_with_cookie_session() -> None:
     pool = FakePool()
     app.state.db_pool = pool
-    app.state.settings = Settings(database_url="postgresql://test/test")
+    app.state.settings = Settings(
+        database_url="postgresql://test/test",
+        cookie_secure=False,
+    )
     client = TestClient(app)
 
     response = client.post(
@@ -483,12 +486,42 @@ def test_admin_can_login_to_panel_with_cookie_session() -> None:
 
     assert response.status_code == 303
     assert response.headers["location"] == "/admin/panel"
-    assert "admin_panel_token" in response.headers["set-cookie"]
+    set_cookie = response.headers["set-cookie"]
+    assert "admin_panel_token" in set_cookie
+    assert "HttpOnly" in set_cookie
+    assert "SameSite=lax" in set_cookie
+    assert "Secure" not in set_cookie
 
     panel_response = client.get("/admin/panel/users")
 
     assert panel_response.status_code == 200
     assert "admin@example.com" in panel_response.text
+
+
+def test_admin_panel_cookie_can_be_secure() -> None:
+    pool = FakePool()
+    app.state.db_pool = pool
+    app.state.settings = Settings(
+        database_url="postgresql://test/test",
+        cookie_secure=True,
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/admin/panel/login",
+        data={
+            "email": "admin@example.com",
+            "password": "admin-password",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    set_cookie = response.headers["set-cookie"]
+    assert "admin_panel_token" in set_cookie
+    assert "HttpOnly" in set_cookie
+    assert "SameSite=lax" in set_cookie
+    assert "Secure" in set_cookie
 
 
 def test_regular_user_cannot_login_to_admin_panel() -> None:
