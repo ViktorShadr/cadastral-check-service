@@ -1,3 +1,5 @@
+"""Authentication endpoints and helpers for user identity management."""
+
 from typing import Annotated
 
 import asyncpg
@@ -16,6 +18,18 @@ router = APIRouter(prefix="/auth", tags=["auth"])
     status_code=status.HTTP_201_CREATED,
 )
 async def register(payload: RegisterRequest, request: Request) -> UserPublic:
+    """Create a new user account.
+
+    Args:
+        payload: Registration data containing email and password.
+        request: Incoming request with access to the database pool.
+
+    Returns:
+        Public representation of the created user.
+
+    Raises:
+        HTTPException: If the email address is already registered.
+    """
     pool: asyncpg.Pool = request.app.state.db_pool
     hashed_password = hash_password(payload.password)
 
@@ -46,6 +60,18 @@ async def register(payload: RegisterRequest, request: Request) -> UserPublic:
 
 @router.post("/login", response_model=Token)
 async def login(payload: LoginRequest, request: Request) -> Token:
+    """Authenticate a user and issue a bearer access token.
+
+    Args:
+        payload: Login credentials supplied by the client.
+        request: Incoming request with access to settings and database pool.
+
+    Returns:
+        Access token response for authenticated API calls.
+
+    Raises:
+        HTTPException: If credentials are invalid or the user is inactive.
+    """
     pool: asyncpg.Pool = request.app.state.db_pool
 
     async with pool.acquire() as connection:
@@ -81,10 +107,29 @@ async def login(payload: LoginRequest, request: Request) -> Token:
 async def me(
     current_user: Annotated[UserInDB, Depends(get_current_user)],
 ) -> UserPublic:
+    """Return the public profile of the authenticated user.
+
+    Args:
+        current_user: Active user resolved from the bearer token.
+
+    Returns:
+        Public user profile.
+
+    Raises:
+        HTTPException: If authentication fails in the dependency.
+    """
     return to_public_user(current_user)
 
 
 def raise_invalid_credentials() -> None:
+    """Raise the standard authentication failure response.
+
+    Returns:
+        None
+
+    Raises:
+        HTTPException: Always raised with a 401 status code.
+    """
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid email or password.",
@@ -93,6 +138,14 @@ def raise_invalid_credentials() -> None:
 
 
 def to_public_user(user: UserInDB) -> UserPublic:
+    """Convert an internal user record to an API-safe user response.
+
+    Args:
+        user: Internal user model including database-only fields.
+
+    Returns:
+        Public user model without the password hash.
+    """
     return UserPublic(
         id=user.id,
         email=user.email,

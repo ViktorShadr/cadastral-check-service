@@ -1,3 +1,5 @@
+"""Public API endpoints for cadastral checks and request history."""
+
 from typing import Annotated
 
 import asyncpg
@@ -30,11 +32,30 @@ DEFAULT_RESULT_PAYLOAD = QueryRequest(
 
 @router.get("/ping")
 async def ping() -> dict[str, str]:
+    """Report that the HTTP service process is alive.
+
+    Args:
+        None
+
+    Returns:
+        Status payload with an ok marker.
+    """
     return {"status": "ok"}
 
 
 @router.get("/ping/db")
 async def ping_db(request: Request) -> dict[str, str]:
+    """Report that the service can reach the configured database.
+
+    Args:
+        request: Incoming request with access to the database pool.
+
+    Returns:
+        Status payload with an ok marker after a successful database query.
+
+    Raises:
+        asyncpg.PostgresError: If the database health query fails.
+    """
     pool: asyncpg.Pool = request.app.state.db_pool
 
     async with pool.acquire() as connection:
@@ -49,6 +70,20 @@ async def result(
     request: Request,
     payload: Annotated[QueryRequest | None, Body()] = None,
 ) -> bool:
+    """Proxy a cadastral check to the external result service.
+
+    Args:
+        request: Incoming request with settings used by the service client.
+        payload: Optional cadastral check payload; a default sample is used
+            when omitted.
+
+    Returns:
+        Boolean result returned by the external service.
+
+    Raises:
+        HTTPException: If the external service times out, is unavailable, or
+            returns an invalid response.
+    """
     result_payload = payload or DEFAULT_RESULT_PAYLOAD
     return await request_external_result(result_payload, request)
 
@@ -59,6 +94,21 @@ async def query(
     request: Request,
     current_user: Annotated[UserInDB, Depends(get_current_user)],
 ) -> QueryResponse:
+    """Run an authenticated cadastral check and persist the request history.
+
+    Args:
+        payload: Cadastral number and coordinates to check.
+        request: Incoming request with settings and database pool.
+        current_user: Authenticated user owning the saved history entry.
+
+    Returns:
+        Response model containing the external boolean check result.
+
+    Raises:
+        HTTPException: If authentication fails or the external service cannot
+            produce a valid result.
+        asyncpg.PostgresError: If saving request history fails.
+    """
     result_value = await request_external_result(payload, request)
     pool: asyncpg.Pool = request.app.state.db_pool
 
@@ -85,6 +135,19 @@ async def query(
 
 
 async def request_external_result(payload: QueryRequest, request: Request) -> bool:
+    """Call the service layer and translate integration errors to HTTP errors.
+
+    Args:
+        payload: Cadastral check payload for the external service.
+        request: Incoming request with access to runtime settings.
+
+    Returns:
+        Boolean result returned by the external result service.
+
+    Raises:
+        HTTPException: If the external call times out, is unavailable, or
+            returns an invalid response.
+    """
     settings = get_settings(request)
 
     try:
@@ -120,6 +183,22 @@ async def history(
     ] = DEFAULT_HISTORY_LIMIT,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[HistoryItem]:
+    """Return cadastral check history visible to the authenticated user.
+
+    Args:
+        request: Incoming request with access to the database pool.
+        current_user: Authenticated user used to scope non-admin history.
+        cadastral_number: Optional cadastral number filter.
+        limit: Maximum number of history entries to return.
+        offset: Number of matching entries to skip.
+
+    Returns:
+        List of history entries ordered from newest to oldest.
+
+    Raises:
+        HTTPException: If authentication fails in the dependency.
+        asyncpg.PostgresError: If the history query fails.
+    """
     pool: asyncpg.Pool = request.app.state.db_pool
     query_text = """
         SELECT

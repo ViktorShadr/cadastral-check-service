@@ -1,3 +1,5 @@
+"""Password hashing and JWT helpers for authentication flows."""
+
 import base64
 import binascii
 import hashlib
@@ -19,6 +21,14 @@ class InvalidTokenError(Exception):
 
 
 def hash_password(password: str) -> str:
+    """Hash a plain-text password with PBKDF2 and a random salt.
+
+    Args:
+        password: Plain-text password supplied by a user.
+
+    Returns:
+        Encoded password hash containing algorithm, iterations, salt, and digest.
+    """
     salt = secrets.token_bytes(16)
     password_hash = hashlib.pbkdf2_hmac(
         "sha256",
@@ -37,6 +47,15 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, hashed_password: str) -> bool:
+    """Check whether a plain-text password matches a stored password hash.
+
+    Args:
+        password: Plain-text password supplied during authentication.
+        hashed_password: Stored password hash produced by hash_password.
+
+    Returns:
+        True when the password matches the stored hash, otherwise False.
+    """
     try:
         algorithm, iterations_text, salt_text, expected_hash = hashed_password.split(
             "$",
@@ -58,6 +77,15 @@ def verify_password(password: str, hashed_password: str) -> bool:
 
 
 def create_access_token(user_id: int, settings: Settings) -> str:
+    """Create a signed access token for an authenticated user.
+
+    Args:
+        user_id: Database identifier of the authenticated user.
+        settings: Runtime settings containing JWT secret and expiration.
+
+    Returns:
+        Compact JWT string that can be used as a bearer token.
+    """
     now = datetime.now(UTC)
     expires_at = now + timedelta(minutes=settings.access_token_expire_minutes)
     payload = {
@@ -70,6 +98,19 @@ def create_access_token(user_id: int, settings: Settings) -> str:
 
 
 def decode_access_token(token: str, settings: Settings) -> int:
+    """Validate an access token and extract its user identifier.
+
+    Args:
+        token: Bearer token received from a client.
+        settings: Runtime settings containing the JWT secret.
+
+    Returns:
+        User identifier stored in the token subject.
+
+    Raises:
+        InvalidTokenError: If the token is malformed, expired, or has a bad
+            signature.
+    """
     try:
         header_text, payload_text, signature_text = token.split(".")
         signed_part = f"{header_text}.{payload_text}".encode("ascii")
@@ -103,6 +144,15 @@ def decode_access_token(token: str, settings: Settings) -> int:
 
 
 def _encode_jwt(payload: dict[str, Any], secret_key: str) -> str:
+    """Serialize and sign a JWT payload.
+
+    Args:
+        payload: Claims to encode into the token body.
+        secret_key: Shared secret used to sign the token.
+
+    Returns:
+        Signed compact JWT string.
+    """
     header = {"alg": JWT_ALGORITHM, "typ": "JWT"}
     header_text = _base64url_encode(_json_bytes(header))
     payload_text = _base64url_encode(_json_bytes(payload))
@@ -112,18 +162,54 @@ def _encode_jwt(payload: dict[str, Any], secret_key: str) -> str:
 
 
 def _sign(value: bytes, secret_key: str) -> str:
+    """Create a base64url-encoded HMAC signature.
+
+    Args:
+        value: Bytes that must be authenticated.
+        secret_key: Shared secret used for HMAC signing.
+
+    Returns:
+        Base64url-encoded signature without padding.
+    """
     signature = hmac.new(secret_key.encode("utf-8"), value, hashlib.sha256).digest()
     return _base64url_encode(signature)
 
 
 def _json_bytes(value: dict[str, Any]) -> bytes:
+    """Encode JSON data in a deterministic byte representation.
+
+    Args:
+        value: JSON-compatible dictionary to encode.
+
+    Returns:
+        UTF-8 encoded JSON bytes with stable key ordering.
+    """
     return json.dumps(value, separators=(",", ":"), sort_keys=True).encode("utf-8")
 
 
 def _base64url_encode(value: bytes) -> str:
+    """Encode bytes with URL-safe base64 without padding.
+
+    Args:
+        value: Raw bytes to encode.
+
+    Returns:
+        ASCII base64url string without trailing padding.
+    """
     return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
 
 
 def _base64url_decode(value: str) -> bytes:
+    """Decode a URL-safe base64 string that may omit padding.
+
+    Args:
+        value: Base64url string to decode.
+
+    Returns:
+        Decoded raw bytes.
+
+    Raises:
+        binascii.Error: If the encoded value is invalid.
+    """
     padding = "=" * (-len(value) % 4)
     return base64.urlsafe_b64decode(f"{value}{padding}")
