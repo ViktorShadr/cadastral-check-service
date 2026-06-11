@@ -3,7 +3,7 @@
 from typing import Annotated
 
 import asyncpg
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.api.dependencies import get_current_user, get_settings
 from app.schemas import (
@@ -23,11 +23,6 @@ from app.services.external_result import (
 router = APIRouter()
 DEFAULT_HISTORY_LIMIT = 100
 MAX_HISTORY_LIMIT = 500
-DEFAULT_RESULT_PAYLOAD = QueryRequest(
-    cadastral_number="77:01:0004012:2054",
-    latitude=55.7558,
-    longitude=37.6173,
-)
 
 
 @router.get("/ping")
@@ -64,18 +59,16 @@ async def ping_db(request: Request) -> dict[str, str]:
     return {"status": "ok"}
 
 
-@router.get("/result")
 @router.post("/result")
 async def result(
+    payload: QueryRequest,
     request: Request,
-    payload: Annotated[QueryRequest | None, Body()] = None,
 ) -> bool:
     """Proxy a cadastral check to the external result service.
 
     Args:
+        payload: Cadastral check payload to proxy to the external service.
         request: Incoming request with settings used by the service client.
-        payload: Optional cadastral check payload; a default sample is used
-            when omitted.
 
     Returns:
         Boolean result returned by the external service.
@@ -84,8 +77,7 @@ async def result(
         HTTPException: If the external service times out, is unavailable, or
             returns an invalid response.
     """
-    result_payload = payload or DEFAULT_RESULT_PAYLOAD
-    return await request_external_result(result_payload, request)
+    return await request_external_result(payload, request)
 
 
 @router.post("/query")
