@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.api.admin import router as admin_router
 from app.api.auth import router as auth_router
 from app.api.routes import router
 from app.core.config import Settings
@@ -25,4 +26,5 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Cadastral Check Service", lifespan=lifespan)
 app.include_router(auth_router)
+app.include_router(admin_router)
 app.include_router(router)

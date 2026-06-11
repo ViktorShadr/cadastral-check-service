@@ -153,3 +153,7 @@ class HistoryItem(BaseModel):
     longitude: float
     result: bool
     created_at: datetime
+
+
+class AdminHistoryItem(HistoryItem):
+    user_id: int | None
