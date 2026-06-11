@@ -2,7 +2,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api import routes
+from app.core.config import Settings
 from app.main import app
+from app.services.external_result import (
+    ExternalServiceInvalidResponseError,
+    ExternalServiceTimeoutError,
+    ExternalServiceUnavailableError,
+)
 
 
 class FakeConnection:
@@ -34,12 +40,18 @@ class FakePool:
 
 
 def test_query_returns_result_and_saves_request(monkeypatch) -> None:  # noqa: ANN001
-    async def fake_get_result() -> bool:
+    async def fake_fetch_external_result(payload, settings) -> bool:  # noqa: ANN001
+        assert payload.cadastral_number == "77:01:0004012:2054"
+        assert settings.external_service_url == "http://external-service:8001"
         return True
 
     pool = FakePool()
     app.state.db_pool = pool
-    monkeypatch.setattr(routes, "get_result", fake_get_result)
+    app.state.settings = Settings(
+        database_url="postgresql://postgres:postgres@db:5432/test",
+        external_service_url="http://external-service:8001",
+    )
+    monkeypatch.setattr(routes, "fetch_external_result", fake_fetch_external_result)
     client = TestClient(app)
 
     response = client.post(
@@ -58,6 +70,57 @@ def test_query_returns_result_and_saves_request(monkeypatch) -> None:  # noqa: A
     query, args = pool.connection.executed_queries[0]
     assert "INSERT INTO request_history" in query
     assert args == ("77:01:0004012:2054", 55.7558, 37.6173, True)
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_status", "expected_detail"),
+    [
+        (
+            ExternalServiceUnavailableError(),
+            502,
+            "External service is unavailable.",
+        ),
+        (
+            ExternalServiceTimeoutError(),
+            504,
+            "External service request timed out.",
+        ),
+        (
+            ExternalServiceInvalidResponseError(),
+            502,
+            "External service returned an invalid response.",
+        ),
+    ],
+)
+def test_query_handles_external_service_errors(
+    monkeypatch,  # noqa: ANN001
+    error: Exception,
+    expected_status: int,
+    expected_detail: str,
+) -> None:
+    async def fake_fetch_external_result(payload, settings) -> bool:  # noqa: ANN001
+        raise error
+
+    pool = FakePool()
+    app.state.db_pool = pool
+    app.state.settings = Settings(
+        database_url="postgresql://postgres:postgres@db:5432/test",
+    )
+    monkeypatch.setattr(routes, "fetch_external_result", fake_fetch_external_result)
+    client = TestClient(app)
+
+    response = client.post(
+        "/query",
+        json={
+            "cadastral_number": "77:01:0004012:2054",
+            "latitude": 55.7558,
+            "longitude": 37.6173,
+        },
+    )
+
+    assert response.status_code == expected_status
+    assert response.json() == {"detail": expected_detail}
+    assert pool.connection.executed_queries == []
 
 
 @pytest.mark.parametrize(

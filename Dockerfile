@@ -14,6 +14,7 @@ COPY pyproject.toml poetry.lock ./
 RUN poetry install --only main --no-ansi
 
 COPY app ./app
+COPY external_service ./external_service
 COPY migrations ./migrations
 COPY scripts ./scripts
 

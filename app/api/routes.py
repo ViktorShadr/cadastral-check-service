@@ -1,21 +1,30 @@
-import asyncio
-import random
 from typing import Annotated
 
 import asyncpg
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Body, HTTPException, Query, Request
 
+from app.core.config import Settings
 from app.schemas import (
     HistoryItem,
     OptionalCadastralNumber,
     QueryRequest,
     QueryResponse,
 )
+from app.services.external_result import (
+    ExternalServiceInvalidResponseError,
+    ExternalServiceTimeoutError,
+    ExternalServiceUnavailableError,
+    fetch_external_result,
+)
 
 router = APIRouter()
-RESULT_DELAY_SECONDS = 0.1
 DEFAULT_HISTORY_LIMIT = 100
 MAX_HISTORY_LIMIT = 500
+DEFAULT_RESULT_PAYLOAD = QueryRequest(
+    cadastral_number="77:01:0004012:2054",
+    latitude=55.7558,
+    longitude=37.6173,
+)
 
 
 @router.get("/ping")
@@ -33,20 +42,23 @@ async def ping_db(request: Request) -> dict[str, str]:
     return {"status": "ok"}
 
 
-async def get_result() -> bool:
-    await asyncio.sleep(RESULT_DELAY_SECONDS)
-    return random.choice([True, False])
+def get_settings(request: Request) -> Settings:
+    return request.app.state.settings
 
 
 @router.get("/result")
 @router.post("/result")
-async def result() -> bool:
-    return await get_result()
+async def result(
+    request: Request,
+    payload: Annotated[QueryRequest | None, Body()] = None,
+) -> bool:
+    result_payload = payload or DEFAULT_RESULT_PAYLOAD
+    return await request_external_result(result_payload, request)
 
 
 @router.post("/query")
 async def query(payload: QueryRequest, request: Request) -> QueryResponse:
-    result_value = await get_result()
+    result_value = await request_external_result(payload, request)
     pool: asyncpg.Pool = request.app.state.db_pool
 
     async with pool.acquire() as connection:
@@ -67,6 +79,28 @@ async def query(payload: QueryRequest, request: Request) -> QueryResponse:
         )
 
     return QueryResponse(result=result_value)
+
+
+async def request_external_result(payload: QueryRequest, request: Request) -> bool:
+    settings = get_settings(request)
+
+    try:
+        return await fetch_external_result(payload, settings)
+    except ExternalServiceTimeoutError as exc:
+        raise HTTPException(
+            status_code=504,
+            detail="External service request timed out.",
+        ) from exc
+    except ExternalServiceUnavailableError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="External service is unavailable.",
+        ) from exc
+    except ExternalServiceInvalidResponseError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="External service returned an invalid response.",
+        ) from exc
 
 
 @router.get("/history")
