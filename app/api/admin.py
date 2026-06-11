@@ -1,3 +1,5 @@
+"""Administrative API and HTML panel endpoints."""
+
 import inspect
 from pathlib import Path as FilePath
 from typing import Annotated
@@ -40,6 +42,18 @@ async def get_current_panel_admin_user(
         Depends(bearer_scheme),
     ] = None,
 ) -> UserInDB:
+    """Resolve an administrator for the HTML panel or bearer-based admin calls.
+
+    Args:
+        request: Incoming request with cookies, overrides, and app state.
+        credentials: Optional bearer credentials supplied by API clients.
+
+    Returns:
+        Authenticated administrator user.
+
+    Raises:
+        HTTPException: If the user is unauthenticated or lacks admin access.
+    """
     current_user = await get_panel_user(request, credentials)
     if not current_user.is_admin:
         raise HTTPException(
@@ -54,6 +68,18 @@ async def get_panel_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None,
 ) -> UserInDB:
+    """Resolve a panel user from dependency overrides, cookie, or bearer token.
+
+    Args:
+        request: Incoming request with cookies and app state.
+        credentials: Optional bearer credentials that override the panel cookie.
+
+    Returns:
+        Authenticated active user.
+
+    Raises:
+        HTTPException: If no valid user can be resolved.
+    """
     override = request.app.dependency_overrides.get(get_current_user)
     if override is not None:
         current_user = override()
@@ -73,6 +99,19 @@ async def get_panel_user(
 
 
 async def get_user_by_access_token(request: Request, token: str) -> UserInDB:
+    """Load an active user referenced by an access token.
+
+    Args:
+        request: Incoming request with settings and database pool.
+        token: Access token from an admin panel cookie or bearer header.
+
+    Returns:
+        Active user loaded from the database.
+
+    Raises:
+        HTTPException: If the token is invalid, expired, or references an
+            inactive or missing user.
+    """
     settings = get_settings(request)
     try:
         user_id = decode_access_token(token, settings)
@@ -107,6 +146,15 @@ async def get_user_by_access_token(request: Request, token: str) -> UserInDB:
 
 
 async def get_user_by_email(request: Request, email: str) -> UserInDB | None:
+    """Load a user by email for admin panel login.
+
+    Args:
+        request: Incoming request with access to the database pool.
+        email: Normalized email submitted by the admin login form.
+
+    Returns:
+        Internal user record when found, otherwise None.
+    """
     pool: asyncpg.Pool = request.app.state.db_pool
 
     async with pool.acquire() as connection:
@@ -136,6 +184,16 @@ def render_login(
     error: str | None = None,
     status_code: int = status.HTTP_200_OK,
 ):
+    """Render the admin login page with an optional validation error.
+
+    Args:
+        request: Incoming request used by the template renderer.
+        error: Optional message shown to the user.
+        status_code: HTTP status code for the rendered response.
+
+    Returns:
+        Template response for the admin login page.
+    """
     return templates.TemplateResponse(
         request,
         "admin/login.html",
@@ -154,6 +212,21 @@ async def users(
     limit: Annotated[int, Query(ge=1, le=MAX_ADMIN_LIMIT)] = DEFAULT_ADMIN_LIMIT,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[UserPublic]:
+    """Return a paginated list of users for administrators.
+
+    Args:
+        request: Incoming request with access to the database pool.
+        _current_admin_user: Admin dependency enforcing access control.
+        limit: Maximum number of users to return.
+        offset: Number of users to skip.
+
+    Returns:
+        List of public user records ordered by newest first.
+
+    Raises:
+        HTTPException: If the caller is not authenticated as an administrator.
+        asyncpg.PostgresError: If the users query fails.
+    """
     pool: asyncpg.Pool = request.app.state.db_pool
 
     async with pool.acquire() as connection:
@@ -189,6 +262,24 @@ async def history(
     limit: Annotated[int, Query(ge=1, le=MAX_ADMIN_LIMIT)] = DEFAULT_ADMIN_LIMIT,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[AdminHistoryItem]:
+    """Return filtered cadastral check history across all users.
+
+    Args:
+        request: Incoming request with access to the database pool.
+        _current_admin_user: Admin dependency enforcing access control.
+        cadastral_number: Optional cadastral number filter.
+        user_id: Optional owner user identifier filter.
+        result: Optional boolean result filter.
+        limit: Maximum number of history entries to return.
+        offset: Number of matching entries to skip.
+
+    Returns:
+        List of administrative history entries ordered by newest first.
+
+    Raises:
+        HTTPException: If the caller is not authenticated as an administrator.
+        asyncpg.PostgresError: If the history query fails.
+    """
     pool: asyncpg.Pool = request.app.state.db_pool
     query_text = """
         SELECT
@@ -239,6 +330,21 @@ async def history_item(
     request: Request,
     _current_admin_user: Annotated[UserInDB, Depends(get_current_admin_user)],
 ) -> AdminHistoryItem:
+    """Return one history entry by identifier for administrators.
+
+    Args:
+        request_id: Identifier of the saved history request.
+        request: Incoming request with access to the database pool.
+        _current_admin_user: Admin dependency enforcing access control.
+
+    Returns:
+        Administrative history entry for the requested identifier.
+
+    Raises:
+        HTTPException: If the caller is not an administrator or the entry does
+            not exist.
+        asyncpg.PostgresError: If the lookup query fails.
+    """
     pool: asyncpg.Pool = request.app.state.db_pool
 
     async with pool.acquire() as connection:
@@ -269,11 +375,31 @@ async def history_item(
 
 @router.get("/panel/login")
 async def admin_panel_login(request: Request):
+    """Render the admin panel login form.
+
+    Args:
+        request: Incoming request used by the template renderer.
+
+    Returns:
+        Template response containing the login form.
+    """
     return render_login(request)
 
 
 @router.post("/panel/login")
 async def admin_panel_login_submit(request: Request):
+    """Authenticate an administrator from the HTML login form.
+
+    Args:
+        request: Incoming request containing form-encoded credentials.
+
+    Returns:
+        Redirect response with an auth cookie on success, or the login template
+        with an error message on failure.
+
+    Raises:
+        asyncpg.PostgresError: If user lookup fails.
+    """
     body = (await request.body()).decode("utf-8")
     form = parse_qs(body, keep_blank_values=True)
     email = form.get("email", [""])[0].strip().lower()
@@ -325,6 +451,14 @@ async def admin_panel_login_submit(request: Request):
 
 @router.post("/panel/logout")
 async def admin_panel_logout():
+    """Clear the admin panel authentication cookie.
+
+    Args:
+        None
+
+    Returns:
+        Redirect response to the admin login page.
+    """
     response = RedirectResponse(
         "/admin/panel/login",
         status_code=status.HTTP_303_SEE_OTHER,
@@ -338,6 +472,18 @@ async def admin_panel(
     request: Request,
     current_admin_user: Annotated[UserInDB, Depends(get_current_panel_admin_user)],
 ):
+    """Render the admin panel landing page.
+
+    Args:
+        request: Incoming request used by the template renderer.
+        current_admin_user: Authenticated administrator for panel context.
+
+    Returns:
+        Template response for the admin panel landing page.
+
+    Raises:
+        HTTPException: If the caller is not authenticated as an administrator.
+    """
     return templates.TemplateResponse(
         request,
         "admin/panel.html",
@@ -355,6 +501,21 @@ async def admin_panel_users(
     limit: Annotated[int, Query(ge=1, le=MAX_ADMIN_LIMIT)] = DEFAULT_ADMIN_LIMIT,
     offset: Annotated[int, Query(ge=0)] = 0,
 ):
+    """Render the admin panel users page.
+
+    Args:
+        request: Incoming request with access to the database pool.
+        current_admin_user: Authenticated administrator for panel context.
+        limit: Maximum number of users to render.
+        offset: Number of users to skip.
+
+    Returns:
+        Template response containing user rows.
+
+    Raises:
+        HTTPException: If the caller is not authenticated as an administrator.
+        asyncpg.PostgresError: If the users query fails.
+    """
     pool: asyncpg.Pool = request.app.state.db_pool
 
     async with pool.acquire() as connection:
@@ -392,6 +553,21 @@ async def admin_panel_history(
     limit: Annotated[int, Query(ge=1, le=MAX_ADMIN_LIMIT)] = DEFAULT_ADMIN_LIMIT,
     offset: Annotated[int, Query(ge=0)] = 0,
 ):
+    """Render the admin panel history list.
+
+    Args:
+        request: Incoming request with access to the database pool.
+        current_admin_user: Authenticated administrator for panel context.
+        limit: Maximum number of history rows to render.
+        offset: Number of history rows to skip.
+
+    Returns:
+        Template response containing history rows with optional user emails.
+
+    Raises:
+        HTTPException: If the caller is not authenticated as an administrator.
+        asyncpg.PostgresError: If the history query fails.
+    """
     pool: asyncpg.Pool = request.app.state.db_pool
 
     async with pool.acquire() as connection:
@@ -432,6 +608,21 @@ async def admin_panel_history_item(
     request: Request,
     current_admin_user: Annotated[UserInDB, Depends(get_current_panel_admin_user)],
 ):
+    """Render a single admin panel history entry.
+
+    Args:
+        request_id: Identifier of the saved history request.
+        request: Incoming request with access to the database pool.
+        current_admin_user: Authenticated administrator for panel context.
+
+    Returns:
+        Template response containing one history item.
+
+    Raises:
+        HTTPException: If the caller is not an administrator or the entry does
+            not exist.
+        asyncpg.PostgresError: If the lookup query fails.
+    """
     pool: asyncpg.Pool = request.app.state.db_pool
 
     async with pool.acquire() as connection:

@@ -1,3 +1,5 @@
+"""FastAPI application assembly and lifecycle management."""
+
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -12,6 +14,17 @@ from app.core.database import close_db_pool, create_db_pool
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Initialize and dispose shared application resources.
+
+    Args:
+        app: FastAPI application instance receiving shared state.
+
+    Yields:
+        None while the application is serving requests.
+
+    Returns:
+        None
+    """
     settings = Settings()
     pool = await create_db_pool(settings)
 

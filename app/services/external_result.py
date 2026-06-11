@@ -1,3 +1,5 @@
+"""Service client for retrieving cadastral results from an external API."""
+
 import httpx
 from pydantic import ValidationError
 
@@ -22,6 +24,23 @@ class ExternalServiceInvalidResponseError(ExternalServiceError):
 
 
 async def fetch_external_result(payload: QueryRequest, settings: Settings) -> bool:
+    """Send a cadastral check request to the configured external service.
+
+    Args:
+        payload: Validated cadastral check request from the API layer.
+        settings: Runtime settings with external service URL and timeout.
+
+    Returns:
+        Boolean cadastral check result parsed from the external response.
+
+    Raises:
+        ExternalServiceTimeoutError: If the external request exceeds the
+            configured timeout.
+        ExternalServiceUnavailableError: If the external service cannot be
+            reached.
+        ExternalServiceInvalidResponseError: If the service returns an error
+            status or a response that does not match the expected schema.
+    """
     timeout = httpx.Timeout(settings.external_service_timeout)
 
     async with httpx.AsyncClient(
