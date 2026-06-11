@@ -60,7 +60,6 @@ htmlcov/
 Thumbs.db
 /.env
 /.coveragerc
-/.flake8
 
 # SQLite databases
 *.sqlite3
