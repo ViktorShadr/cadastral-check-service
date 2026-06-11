@@ -39,7 +39,10 @@ class FakePool:
         return FakeAcquireContext(self.connection)
 
 
-def test_query_returns_result_and_saves_request(monkeypatch) -> None:  # noqa: ANN001
+def test_query_returns_result_and_saves_request(  # noqa: ANN001
+    monkeypatch,
+    authenticated_user,
+) -> None:
     async def fake_fetch_external_result(payload, settings) -> bool:  # noqa: ANN001
         assert payload.cadastral_number == "77:01:0004012:2054"
         assert settings.external_service_url == "http://external-service:8001"
@@ -69,7 +72,7 @@ def test_query_returns_result_and_saves_request(monkeypatch) -> None:  # noqa: A
 
     query, args = pool.connection.executed_queries[0]
     assert "INSERT INTO request_history" in query
-    assert args == ("77:01:0004012:2054", 55.7558, 37.6173, True)
+    assert args == (123, "77:01:0004012:2054", 55.7558, 37.6173, True)
 
 
 @pytest.mark.parametrize(
@@ -94,6 +97,7 @@ def test_query_returns_result_and_saves_request(monkeypatch) -> None:  # noqa: A
 )
 def test_query_handles_external_service_errors(
     monkeypatch,  # noqa: ANN001
+    authenticated_user,  # noqa: ANN001
     error: Exception,
     expected_status: int,
     expected_detail: str,
@@ -153,6 +157,7 @@ def test_query_handles_external_service_errors(
     ],
 )
 def test_query_rejects_invalid_payload(
+    authenticated_user,  # noqa: ANN001
     payload: dict[str, object],
     expected_error: str,
 ) -> None:

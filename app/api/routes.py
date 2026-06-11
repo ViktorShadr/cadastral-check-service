@@ -1,14 +1,15 @@
 from typing import Annotated
 
 import asyncpg
-from fastapi import APIRouter, Body, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 
-from app.core.config import Settings
+from app.api.dependencies import get_current_user, get_settings
 from app.schemas import (
     HistoryItem,
     OptionalCadastralNumber,
     QueryRequest,
     QueryResponse,
+    UserInDB,
 )
 from app.services.external_result import (
     ExternalServiceInvalidResponseError,
@@ -42,10 +43,6 @@ async def ping_db(request: Request) -> dict[str, str]:
     return {"status": "ok"}
 
 
-def get_settings(request: Request) -> Settings:
-    return request.app.state.settings
-
-
 @router.get("/result")
 @router.post("/result")
 async def result(
@@ -57,7 +54,11 @@ async def result(
 
 
 @router.post("/query")
-async def query(payload: QueryRequest, request: Request) -> QueryResponse:
+async def query(
+    payload: QueryRequest,
+    request: Request,
+    current_user: Annotated[UserInDB, Depends(get_current_user)],
+) -> QueryResponse:
     result_value = await request_external_result(payload, request)
     pool: asyncpg.Pool = request.app.state.db_pool
 
@@ -65,13 +66,15 @@ async def query(payload: QueryRequest, request: Request) -> QueryResponse:
         await connection.execute(
             """
             INSERT INTO request_history (
+                user_id,
                 cadastral_number,
                 latitude,
                 longitude,
                 result
             )
-            VALUES ($1, $2, $3, $4)
+            VALUES ($1, $2, $3, $4, $5)
             """,
+            current_user.id,
             payload.cadastral_number,
             payload.latitude,
             payload.longitude,
@@ -106,6 +109,7 @@ async def request_external_result(payload: QueryRequest, request: Request) -> bo
 @router.get("/history")
 async def history(
     request: Request,
+    current_user: Annotated[UserInDB, Depends(get_current_user)],
     cadastral_number: Annotated[
         OptionalCadastralNumber,
         Query(),
@@ -128,10 +132,18 @@ async def history(
         FROM request_history
     """
     query_args: list[object] = []
+    where_clauses: list[str] = []
+
+    if not current_user.is_admin:
+        query_args.append(current_user.id)
+        where_clauses.append(f"user_id = ${len(query_args)}")
 
     if cadastral_number is not None:
-        query_text += " WHERE cadastral_number = $1"
         query_args.append(cadastral_number)
+        where_clauses.append(f"cadastral_number = ${len(query_args)}")
+
+    if where_clauses:
+        query_text += " WHERE " + " AND ".join(where_clauses)
 
     limit_placeholder = len(query_args) + 1
     offset_placeholder = len(query_args) + 2
