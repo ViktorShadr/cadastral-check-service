@@ -34,7 +34,9 @@ class FakePool:
         return FakeAcquireContext(self.connection)
 
 
-def test_history_returns_request_history_sorted_by_created_at() -> None:
+def test_history_returns_request_history_sorted_by_created_at(
+    authenticated_user,  # noqa: ANN001
+) -> None:
     rows = [
         {
             "id": 2,
@@ -81,13 +83,16 @@ def test_history_returns_request_history_sorted_by_created_at() -> None:
 
     query, args = pool.connection.fetch_calls[0]
     assert "FROM request_history" in query
+    assert "WHERE user_id = $1" in query
     assert "ORDER BY created_at DESC" in query
-    assert "LIMIT $1 OFFSET $2" in query
+    assert "LIMIT $2 OFFSET $3" in query
     assert "WHERE cadastral_number" not in query
-    assert args == (100, 0)
+    assert args == (123, 100, 0)
 
 
-def test_history_filters_by_cadastral_number() -> None:
+def test_history_filters_by_cadastral_number(
+    authenticated_user,
+) -> None:  # noqa: ANN001
     rows = [
         {
             "id": 1,
@@ -111,13 +116,15 @@ def test_history_filters_by_cadastral_number() -> None:
     assert response.json()[0]["cadastral_number"] == "77:01:0004012:2054"
 
     query, args = pool.connection.fetch_calls[0]
-    assert "WHERE cadastral_number = $1" in query
+    assert "WHERE user_id = $1 AND cadastral_number = $2" in query
     assert "ORDER BY created_at DESC" in query
-    assert "LIMIT $2 OFFSET $3" in query
-    assert args == ("77:01:0004012:2054", 100, 0)
+    assert "LIMIT $3 OFFSET $4" in query
+    assert args == (123, "77:01:0004012:2054", 100, 0)
 
 
-def test_history_applies_limit_and_offset_to_sql() -> None:
+def test_history_applies_limit_and_offset_to_sql(
+    authenticated_user,  # noqa: ANN001
+) -> None:
     pool = FakePool([])
     app.state.db_pool = pool
     client = TestClient(app)
@@ -129,11 +136,11 @@ def test_history_applies_limit_and_offset_to_sql() -> None:
 
     query, args = pool.connection.fetch_calls[0]
     assert "ORDER BY created_at DESC" in query
-    assert "LIMIT $1 OFFSET $2" in query
-    assert args == (25, 50)
+    assert "LIMIT $2 OFFSET $3" in query
+    assert args == (123, 25, 50)
 
 
-def test_history_rejects_invalid_limit() -> None:
+def test_history_rejects_invalid_limit(authenticated_user) -> None:  # noqa: ANN001
     pool = FakePool([])
     app.state.db_pool = pool
     client = TestClient(app)
@@ -144,7 +151,9 @@ def test_history_rejects_invalid_limit() -> None:
     assert pool.connection.fetch_calls == []
 
 
-def test_history_rejects_invalid_cadastral_number_filter() -> None:
+def test_history_rejects_invalid_cadastral_number_filter(
+    authenticated_user,  # noqa: ANN001
+) -> None:
     pool = FakePool([])
     app.state.db_pool = pool
     client = TestClient(app)
