@@ -33,10 +33,13 @@ Interactive API documentation is available after startup:
 | --- | --- | --- |
 | `GET` | `/ping` | Application health check. |
 | `GET` | `/ping/db` | PostgreSQL connection health check. |
+| `POST` | `/auth/register` | Registers a user with email and password. |
+| `POST` | `/auth/login` | Returns a JWT access token for valid credentials. |
+| `GET` | `/auth/me` | Returns the current authenticated user. |
 | `GET` | `/result` | Compatibility endpoint. Proxies a default request to external-service and returns `true` or `false`. |
 | `POST` | `/result` | Compatibility endpoint. Proxies request data to external-service and returns `true` or `false`. |
-| `POST` | `/query` | Checks cadastral data, stores request history, and returns the result. |
-| `GET` | `/history` | Returns stored request history sorted by `created_at` descending. |
+| `POST` | `/query` | Checks cadastral data, stores request history for the current user, and returns the result. Requires Bearer auth. |
+| `GET` | `/history` | Returns request history sorted by `created_at` descending. Regular users see only their own history. Requires Bearer auth. |
 
 The external-service exposes:
 
@@ -53,6 +56,15 @@ The external-service exposes:
 - `/history` supports `limit` from `1` to `500`; default is `100`.
 - `/history` supports `offset` from `0`; default is `0`.
 - Invalid input returns `422 Unprocessable Entity` with validation details.
+
+### Authorization
+
+- Passwords are stored as PBKDF2-HMAC-SHA256 hashes.
+- `/auth/login` returns an HS256 JWT access token.
+- Send protected requests with `Authorization: Bearer <access_token>`.
+- Missing, invalid, expired, or inactive-user tokens return `401 Unauthorized`.
+- `/query` and `/history` are protected. A regular user sees only records linked
+  to their own `users.id`.
 
 ## Environment
 
@@ -71,6 +83,8 @@ APP_PORT=8000
 EXTERNAL_SERVICE_URL=http://external-service:8001
 EXTERNAL_SERVICE_TIMEOUT=2.0
 EXTERNAL_SERVICE_PORT=8002
+JWT_SECRET_KEY=change-this-secret
+ACCESS_TOKEN_EXPIRE_MINUTES=30
 POSTGRES_DB=cadastral_check_service
 POSTGRES_USER=postgres_user
 POSTGRES_PASSWORD=postgres_password
@@ -86,6 +100,9 @@ EXTERNAL_SERVICE_URL=http://localhost:8001
 
 `EXTERNAL_SERVICE_TIMEOUT` is the main service timeout in seconds for calls to
 external-service.
+
+`JWT_SECRET_KEY` signs access tokens. Use a strong unique value in production.
+`ACCESS_TOKEN_EXPIRE_MINUTES` controls access token lifetime.
 
 ## Run With Docker
 
@@ -260,11 +277,68 @@ Response:
 {"result":true}
 ```
 
+### Register
+
+```bash
+curl -X POST http://localhost:8000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "strong-password"
+  }'
+```
+
+Response:
+
+```json
+{
+  "id": 1,
+  "email": "user@example.com",
+  "is_active": true,
+  "is_admin": false,
+  "created_at": "2026-01-01T12:00:00Z"
+}
+```
+
+### Login
+
+```bash
+curl -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "strong-password"
+  }'
+```
+
+Response:
+
+```json
+{
+  "access_token": "<jwt>",
+  "token_type": "bearer"
+}
+```
+
+Use the token in protected requests:
+
+```bash
+TOKEN="<jwt>"
+```
+
+### Current User
+
+```bash
+curl http://localhost:8000/auth/me \
+  -H "Authorization: Bearer $TOKEN"
+```
+
 ### Cadastral Query
 
 ```bash
 curl -X POST http://localhost:8000/query \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{
     "cadastral_number": "77:01:0004012:2054",
     "latitude": 55.7558,
@@ -281,7 +355,8 @@ Response:
 ### Request History
 
 ```bash
-curl http://localhost:8000/history
+curl http://localhost:8000/history \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 Response:
@@ -303,22 +378,27 @@ Filter by cadastral number:
 
 ```bash
 curl --get http://localhost:8000/history \
+  -H "Authorization: Bearer $TOKEN" \
   --data-urlencode "cadastral_number=77:01:0004012:2054"
 ```
 
 Use pagination:
 
 ```bash
-curl "http://localhost:8000/history?limit=25&offset=50"
+curl "http://localhost:8000/history?limit=25&offset=50" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 ## Project Structure
 
 ```text
 app/
+  api/auth.py            Authentication routes
+  api/dependencies.py    Shared FastAPI dependencies
   api/routes.py          API routes
   core/config.py         Environment-based settings
   core/database.py       asyncpg connection pool
+  core/security.py       Password hashing and JWT helpers
   services/              External service clients
   main.py                FastAPI application
   schemas.py             Pydantic schemas and validators

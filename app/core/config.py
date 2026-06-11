@@ -11,3 +11,5 @@ class Settings(BaseSettings):
     database_url: str
     external_service_url: str = "http://localhost:8001"
     external_service_timeout: float = 2.0
+    jwt_secret_key: str = "change-me-in-production"
+    access_token_expire_minutes: int = 30

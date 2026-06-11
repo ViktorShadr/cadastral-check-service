@@ -144,6 +144,7 @@ def test_query_request_rejects_non_json_number_coordinate_types(
 @pytest.mark.parametrize("missing_field", ["cadastral_number", "latitude", "longitude"])
 def test_query_endpoint_rejects_missing_required_fields(
     monkeypatch,  # noqa: ANN001
+    authenticated_user,  # noqa: ANN001
     missing_field: str,
 ) -> None:
     async def fail_if_called(payload, settings) -> bool:  # noqa: ANN001
@@ -179,6 +180,7 @@ def test_query_endpoint_rejects_missing_required_fields(
 )
 def test_query_endpoint_rejects_invalid_payload_before_side_effects(
     monkeypatch,  # noqa: ANN001
+    authenticated_user,  # noqa: ANN001
     payload: dict[str, object],
 ) -> None:
     external_calls: list[object] = []

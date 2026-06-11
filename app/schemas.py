@@ -10,6 +10,8 @@ CADASTRAL_NUMBER_ERROR = (
     "Cadastral number must contain four numeric parts separated by colons, "
     "for example 77:01:0004012:2054."
 )
+EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+EMAIL_ERROR = "Email must be a valid email address."
 
 
 def validate_cadastral_number(value: str) -> str:
@@ -28,6 +30,15 @@ def validate_optional_cadastral_number(value: str | None) -> str | None:
         return None
 
     return validate_cadastral_number(value)
+
+
+def validate_email(value: str) -> str:
+    normalized_value = value.strip().lower()
+
+    if len(normalized_value) > 255 or not EMAIL_PATTERN.fullmatch(normalized_value):
+        raise ValueError(EMAIL_ERROR)
+
+    return normalized_value
 
 
 def validate_json_number(value: object) -> object:
@@ -67,6 +78,23 @@ OptionalCadastralNumber = Annotated[
     ),
     AfterValidator(validate_optional_cadastral_number),
 ]
+Email = Annotated[
+    str,
+    Field(
+        description="User email address.",
+        examples=["user@example.com"],
+        max_length=255,
+    ),
+    AfterValidator(validate_email),
+]
+Password = Annotated[
+    str,
+    Field(
+        description="User password.",
+        min_length=8,
+        max_length=128,
+    ),
+]
 Latitude = Annotated[
     float,
     Field(description="Latitude in degrees from -90 to 90."),
@@ -89,6 +117,33 @@ class QueryRequest(BaseModel):
 
 class QueryResponse(BaseModel):
     result: bool
+
+
+class RegisterRequest(BaseModel):
+    email: Email
+    password: Password
+
+
+class LoginRequest(BaseModel):
+    email: Email
+    password: Password
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class UserPublic(BaseModel):
+    id: int
+    email: str
+    is_active: bool
+    is_admin: bool
+    created_at: datetime
+
+
+class UserInDB(UserPublic):
+    hashed_password: str
 
 
 class HistoryItem(BaseModel):
