@@ -179,7 +179,7 @@ Use Docker Compose with three services: `app`, `external-service`, and `db`.
 
 - Compose documents and starts the full local topology with one command.
 - The main app can depend on the PostgreSQL health check and the external-service
-  process.
+  health check, so it starts after both dependencies are ready.
 - Environment variables are centralized through `.env` and `docker-compose.yml`.
 - The external emulator runs as a real network service, so integration behavior
   is close to a real provider call.
